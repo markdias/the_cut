@@ -261,7 +261,9 @@ const Navbar = ({ settings, customSections = [], pageSections = [] }) => {
                 })()}
                 {(() => {
                     const bookingSection = pageSections.find(s => s.id === 'booking');
-                    if (bookingSection?.enabled !== false) {
+                    const isVisible = settings.show_booking_section !== 'false' && bookingSection?.enabled !== false;
+
+                    if (isVisible) {
                         const isSeparate = bookingSection?.is_separate_page;
                         if (isSeparate) {
                             return <Link to="/section/booking" className="btn-primary" onClick={toggleMenu}>Book Now</Link>;
@@ -380,6 +382,9 @@ const Hero = ({ settings = {}, pageSections = [] }) => {
                     })()}
                     {(() => {
                         const servicesSection = pageSections.find(s => s.id === 'services');
+                        const isVisible = settings.show_services_section !== 'false' && servicesSection?.enabled !== false;
+                        if (!isVisible) return null;
+
                         const isSeparate = servicesSection?.is_separate_page;
                         const style = {
                             border: '1px solid var(--accent)',
@@ -1132,6 +1137,9 @@ const Footer = ({ settings = {}, phoneNumbers = [], pageSections = [] }) => {
                         </p>
                         {(() => {
                             const bookingSection = pageSections.find(s => s.id === 'booking');
+                            const isVisible = settings.show_booking_section !== 'false' && bookingSection?.enabled !== false;
+                            if (!isVisible) return null;
+
                             const isSeparate = bookingSection?.is_separate_page;
                             const style = {
                                 color: 'var(--primary)',
@@ -1142,7 +1150,9 @@ const Footer = ({ settings = {}, phoneNumbers = [], pageSections = [] }) => {
                                 letterSpacing: '1px',
                                 borderBottom: '1px solid var(--primary)',
                                 width: 'fit-content',
-                                paddingBottom: '2px'
+                                paddingBottom: '2px',
+                                display: 'block',
+                                marginBottom: '10px'
                             };
 
                             if (isSeparate) {
@@ -1152,6 +1162,34 @@ const Footer = ({ settings = {}, phoneNumbers = [], pageSections = [] }) => {
                                 <a href="#booking" style={style}>Book Online</a>
                             ) : (
                                 <Link to="/#booking" style={style}>Book Online</Link>
+                            );
+                        })()}
+                        {(() => {
+                            const servicesSection = pageSections.find(s => s.id === 'services');
+                            const isVisible = settings.show_services_section !== 'false' && servicesSection?.enabled !== false;
+                            if (!isVisible) return null;
+
+                            const isSeparate = servicesSection?.is_separate_page;
+                            const style = {
+                                color: 'var(--primary)',
+                                textDecoration: 'none',
+                                fontWeight: '700',
+                                fontSize: '0.85rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1px',
+                                borderBottom: '1px solid var(--primary)',
+                                width: 'fit-content',
+                                paddingBottom: '2px',
+                                display: 'block'
+                            };
+
+                            if (isSeparate) {
+                                return <Link to="/section/services" style={style}>Our Services</Link>;
+                            }
+                            return isHomePage ? (
+                                <a href="#services" style={style}>Our Services</a>
+                            ) : (
+                                <Link to="/#services" style={style}>Our Services</Link>
                             );
                         })()}
                     </div>
