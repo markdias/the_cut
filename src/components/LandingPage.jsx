@@ -138,7 +138,7 @@ const Navbar = ({ settings, customSections = [], pageSections = [] }) => {
                         else if (id === 'pricing' && settings.show_pricing_section !== 'false') label = settings.pricing_menu_name || 'Pricing';
                         else if (id === 'gallery' && settings.show_gallery_section !== 'false') label = settings.gallery_menu_name || 'Gallery';
                         else if (id === 'testimonials' && settings.show_testimonials_section === 'true') label = settings.testimonials_menu_name || 'Testimonials';
-                        else if (id === 'contact') label = settings.contact_menu_name || 'Contact';
+                        else if (id === 'contact' && settings.show_contact_section !== 'false') label = settings.contact_menu_name || 'Contact';
                         else if (id === 'booking') return null;
                         else {
                             const custom = customSections.find(s => s.id === id);
@@ -240,7 +240,7 @@ const Navbar = ({ settings, customSections = [], pageSections = [] }) => {
                         else if (id === 'gallery' && settings.show_gallery_section !== 'false') label = settings.gallery_menu_name || 'Gallery';
                         else if (id === 'testimonials' && settings.show_testimonials_section === 'true') label = settings.testimonials_menu_name || 'Testimonials';
                         else if (id === 'booking' && settings.show_booking_section !== 'false') label = settings.booking_menu_name || 'Book Now';
-                        else if (id === 'contact') label = settings.contact_menu_name || 'Contact';
+                        else if (id === 'contact' && settings.show_contact_section !== 'false') label = settings.contact_menu_name || 'Contact';
                         else {
                             const custom = customSections.find(s => s.id === id);
                             if (custom && custom.enabled !== false) label = custom.menu_name;
