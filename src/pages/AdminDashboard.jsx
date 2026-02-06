@@ -1,0 +1,7171 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { Instagram, MapPin, Phone, Calendar, Menu, X, Mail, MessageCircle, Facebook, Music2, Scissors, Info, Save, Trash2, Plus, Image, ChevronUp, ChevronDown, List, Settings, Tag, User, Users, Palette, Shield, Loader2, Maximize2, AlertTriangle, Monitor, Smartphone, Layout, LogOut, Search, Clock, Database, Edit, Check, ChevronLeft, ChevronRight, ArrowRightLeft, GripVertical, Type, Star, Sparkles, Feather, Droplet, Wind, Sun, Moon, Zap, Heart, Smile, Ban } from 'lucide-react';
+import AntdDatePicker from '../components/AntdDatePicker';
+import { useTheme } from '../lib/ThemeContext';
+
+const TABS = [
+    { id: 'general', label: 'General Settings', icon: <Settings size={18} /> },
+    { id: 'contact', label: 'Contact Us', icon: <MessageCircle size={18} /> },
+    { id: 'theme', label: 'Themes', icon: <Palette size={18} /> },
+    { id: 'messages', label: 'Messages', icon: <Mail size={18} /> },
+    { id: 'privacy', label: 'Privacy Policy', icon: <Shield size={18} /> },
+    { id: 'terms', label: 'Terms & Conditions', icon: <Shield size={18} /> },
+    { id: 'page_flow', label: 'Page Flow', icon: <ArrowRightLeft size={18} /> },
+    { id: 'appointments', label: 'Appointments', icon: <Calendar size={18} /> },
+    { id: 'hours', label: 'Opening Hours', icon: <Clock size={18} /> },
+    { id: 'clients', label: 'Clients', icon: <User size={18} /> },
+    { id: 'team', label: 'Our Team', icon: <Users size={20} /> },
+    { id: 'testimonials', label: 'Testimonials', icon: <MessageCircle size={18} /> },
+    { id: 'gallery', label: 'Gallery', icon: <Image size={18} /> },
+    { id: 'pricing', label: 'Pricing', icon: <Tag size={18} /> },
+    { id: 'services', label: 'Services', icon: <Scissors size={18} /> },
+    { id: 'custom_sections', label: 'Custom Section', icon: <List size={18} /> },
+];
+
+const STYLIST_COLORS = {
+    'Jo': 'bg-secondary text-blue-800 border-blue-200',
+    'Nisha': 'bg-purple-100 text-purple-800 border-purple-200',
+    'default': 'bg-secondary text-primary border-primary/20'
+};
+
+const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const TIME_SLOTS = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+
+const GENERAL_FIELDS = [
+    { key: 'site_title', label: 'Website Browser Title', icon: <Layout size={16} /> },
+    { key: 'hero_title', label: 'Hero Section Title', icon: <Type size={16} /> },
+    { key: 'hero_subtitle', label: 'Hero Section Subtitle', icon: <Type size={16} /> },
+    { key: 'footer_description', label: 'Footer Description', icon: <Info size={16} /> },
+];
+
+const CONTACT_FIELDS = [
+    { key: 'email', label: 'Email Address', icon: <Mail size={16} /> },
+    { key: 'address', label: 'Business Address', icon: <MapPin size={16} /> },
+    { key: 'instagram_url', label: 'Instagram URL', icon: <Instagram size={16} /> },
+    { key: 'instagram_handle', label: 'Instagram Handle', icon: <Instagram size={16} /> },
+    { key: 'facebook_url', label: 'Facebook URL', icon: <Facebook size={16} /> },
+    { key: 'tiktok_url', label: 'TikTok URL', icon: <Music2 size={16} /> },
+];
+
+const EMAIL_VARIABLES = [
+    { tag: '{{name}}', desc: 'Customer Name' },
+    { tag: '{{service}}', desc: 'Service Name' },
+    { tag: '{{professional}}', desc: 'Professional Name' },
+    { tag: '{{date}}', desc: 'Date of Appointment' },
+    { tag: '{{time}}', desc: 'Time of Appointment' },
+    { tag: '{{business_phone}}', desc: 'Business Phone Number' },
+    { tag: '{{business_address}}', desc: 'Business Address' },
+];
+
+const DEFAULT_EMAIL_TEMPLATE = `
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #EAE0D5; border-radius: 12px;">
+    <h2 style="color: var(--primary); border-bottom: 2px solid #EAE0D5; padding-bottom: 10px;">Booking Confirmed!</h2>
+    <p>Hi {{name}},</p>
+    <p>Thank you for choosing {{business_name}}. Your appointment is officially confirmed.</p>
+
+    <div style="background-color: #FDFBF9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 5px 0;"><strong>Service:</strong> {{service}}</p>
+        <p style="margin: 5px 0;"><strong>Professional:</strong> {{professional}}</p>
+        <p style="margin: 5px 0;"><strong>Date:</strong> {{date}}</p>
+        <p style="margin: 5px 0;"><strong>Time:</strong> {{time}}</p>
+    </div>
+
+    <p style="font-size: 0.9rem; color: #666;">
+        📍 <strong>Location:</strong> {{business_address}}<br>
+        📞 <strong>Phone:</strong> {{business_phone}}
+    </p>
+
+    <p style="margin-top: 30px; font-size: 0.8rem; color: #999;">
+        Please give us at least 24 hours notice for any cancellations or changes.
+    </p>
+</div>`;
+
+const AdminDashboard = ({ refreshSiteData }) => {
+    const [activeTab, setActiveTab] = useState('general');
+    const [loading, setLoading] = useState(true);
+    const [message, setMessage] = useState({ type: '', text: '' });
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { theme } = useTheme();
+    const navigate = useNavigate();
+
+    // Data States
+    const [siteSettings, setSiteSettings] = useState({});
+    const [services, setServices] = useState([]);
+    const [pricing, setPricing] = useState([]);
+    const [priceCategories, setPriceCategories] = useState([]);
+    const [stylists, setStylists] = useState([]);
+    const [gallery, setGallery] = useState([]);
+    const [appointments, setAppointments] = useState([]);
+    const [clients, setClients] = useState([]); // Added clients state
+    const [testimonials, setTestimonials] = useState([]);
+    const [customSections, setCustomSections] = useState([]);
+
+    useEffect(() => {
+        fetchAllData();
+    }, []);
+
+    const fetchAllData = async () => {
+        setLoading(true);
+        try {
+            const [
+                { data: settings },
+                { data: srvs },
+                { data: prices },
+                { data: stls },
+                { data: gly },
+                { data: clts },
+                { data: tests },
+                { data: customSects },
+                { data: cats }
+            ] = await Promise.all([
+                supabase.from('site_settings').select('*'),
+                supabase.from('services_overview').select('*'),
+                supabase.from('price_list').select('*').order('sort_order'),
+                supabase.from('stylist_calendars').select('*').order('sort_order'),
+                supabase.from('gallery_images').select('*').order('sort_order'),
+                supabase.from('clients').select('*').order('created_at', { ascending: false }),
+                supabase.from('testimonials').select('*').order('sort_order'),
+                supabase.from('custom_sections').select('*, custom_section_elements(*)').order('sort_order'),
+                supabase.from('price_categories').select('*').order('sort_order')
+            ]);
+            if (settings) {
+                const settingsObj = {};
+                settings.forEach(s => settingsObj[s.key] = s.value);
+                setSiteSettings(settingsObj);
+            }
+
+            if (srvs) setServices(srvs);
+            if (prices) setPricing(prices);
+            if (cats) setPriceCategories(cats);
+            if (stls) setStylists(stls);
+            if (gly) setGallery(gly);
+            if (clts) setClients(clts);
+            if (tests) setTestimonials(tests);
+            if (customSects) setCustomSections(customSects);
+
+        } catch (err) {
+            console.error('Error fetching data:', err.message);
+            setMessage({ type: 'error', text: 'Error loading data. Make sure tables exist.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Refresh clients manually if needed
+    const fetchClients = async () => {
+        const { data, error } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+        if (data) setClients(data);
+    };
+
+    const showMessage = (type, text) => {
+        setMessage({ type, text });
+        setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        navigate('/admin/login');
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <Loader2 size={40} className="animate-spin text-primary" />
+            </div>
+        );
+    }
+
+
+    return (
+        <div className="flex h-screen bg-secondary font-sans text-stone-900">
+            {/* Mobile Backdrop */}
+            {sidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-[45] md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 overflow-y-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10  rounded-lg flex items-center justify-center" style={{ backgroundColor: "var(--primary)" }}>
+                            <Scissors size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-lg font-semibold text-gray-900">{siteSettings.business_name}</h1>
+                            <p className="text-xs text-gray-500">Admin Panel</p>
+                        </div>
+                    </div>
+                </div>
+
+                <nav className="flex-grow p-4 space-y-1">
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm ${activeTab === tab.id
+                                ? 'bg-secondary text-primary font-medium'
+                                : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="p-4 border-t border-gray-200 space-y-1">
+                    <a
+                        href="/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-2 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-lg transition-all text-sm"
+                    >
+                        <Monitor size={18} />
+                        Go to Website
+                    </a>
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-lg transition-all text-sm"
+                    >
+                        <LogOut size={18} />
+                        Sign Out
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <main className="flex-grow overflow-y-auto pt-16 md:pt-0">
+                {/* Mobile Header */}
+                <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 flex items-center px-4 z-40">
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        className="p-2 -ml-2 text-gray-600 hover:text-gray-900"
+                    >
+                        <Menu size={24} />
+                    </button>
+                    <span className="ml-4 font-bold text-primary">Admin Dashboard</span>
+                </div>
+
+                <div className="max-w-6xl mx-auto p-8">
+                    <AnimatePresence mode="wait">
+                        {message.text && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-lg shadow-lg border flex items-center gap-3 min-w-[300px] ${message.type === 'success'
+                                    ? 'bg-green-50 border-green-200 text-green-800'
+                                    : 'bg-red-50 border-red-200 text-red-800'
+                                    }`}
+                            >
+                                {message.type === 'success' ? <Check size={18} /> : <Info size={18} />}
+                                <div className="flex-1 font-medium">{message.text}</div>
+                                <button onClick={() => setMessage({ type: '', text: '' })} className="text-gray-400 hover:text-gray-600">
+                                    <X size={16} />
+                                </button>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    <TabContent
+                        activeTab={activeTab}
+                        data={{ siteSettings, services, pricing, priceCategories, stylists, gallery, appointments, clients, testimonials, customSections }}
+                        setData={{ setSiteSettings, setServices, setPricing, setPriceCategories, setStylists, setGallery, setAppointments, setClients, setTestimonials, setCustomSections }}
+                        refresh={fetchAllData}
+                        showMessage={showMessage}
+                        fetchClients={fetchClients}
+                        theme={theme}
+                        refreshSiteData={refreshSiteData}
+                    />
+                </div>
+            </main>
+        </div>
+    );
+};
+
+const TabContent = ({ activeTab, data, setData, refresh, showMessage, fetchClients, theme, refreshSiteData }) => {
+    switch (activeTab) {
+        case 'general': return <GeneralTab settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} theme={theme} />;
+        case 'contact': return <ContactTab settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} theme={theme} />;
+        case 'hours': return <OpeningHoursTab settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} theme={theme} />;
+        case 'theme': return <ThemeTab showMessage={showMessage} />;
+        case 'services': return <ServicesTab services={data.services} settings={data.siteSettings} setSettings={setData.setSiteSettings} refresh={refresh} showMessage={showMessage} theme={theme} />;
+        case 'pricing': return <PricingTab pricing={data.pricing} categories={data.priceCategories} refresh={refresh} showMessage={showMessage} settings={data.siteSettings} setSettings={setData.setSiteSettings} theme={theme} />;
+        case 'team': return <TeamTab stylists={data.stylists} services={data.services} pricing={data.pricing} priceCategories={data.priceCategories} settings={data.siteSettings} setSettings={setData.setSiteSettings} refresh={refresh} showMessage={showMessage} theme={theme} />;
+        case 'gallery': return <GalleryTab gallery={data.gallery} settings={data.siteSettings} setSettings={setData.setSiteSettings} refresh={refresh} showMessage={showMessage} theme={theme} />;
+        case 'appointments': return <AppointmentsTab appointments={data.appointments} setAppointments={setData.setAppointments} showMessage={showMessage} clients={data.clients} setClients={setData.setClients} services={data.services} stylists={data.stylists} pricing={data.pricing} openingHours={data.siteSettings?.opening_hours} defaultView={data.siteSettings?.default_appointment_view} settings={data.siteSettings} setSettings={setData.setSiteSettings} theme={theme} />;
+        case 'clients': return <ClientsTab clients={data.clients} setClients={setData.setClients} showMessage={showMessage} refreshClients={fetchClients} />;
+        case 'testimonials': return <TestimonialsTab testimonials={data.testimonials} settings={data.siteSettings} setSettings={setData.setSiteSettings} refresh={refresh} showMessage={showMessage} theme={theme} />;
+        case 'custom_sections': return <CustomSectionsTab customSections={data.customSections} setCustomSections={setData.setCustomSections} siteSettings={data.siteSettings} refresh={refresh} showMessage={showMessage} theme={theme} />;
+        case 'privacy': return <PrivacyPolicyEditor settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} theme={theme} />;
+        case 'terms': return <TermsAndConditionsEditor settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} theme={theme} />;
+        case 'messages': return <MessagesTab settings={data.siteSettings} setSettings={setData.setSiteSettings} showMessage={showMessage} refresh={refresh} theme={theme} />;
+        case 'page_flow': return <PageFlowTab customSections={data.customSections} showMessage={showMessage} refreshSiteData={refreshSiteData} />;
+        default: return null;
+    }
+};
+
+const ImageUploader = ({ onUpload, folder = 'general', showMessage }) => {
+    const [uploading, setUploading] = useState(false);
+
+    const handleUpload = async (e) => {
+        try {
+            setUploading(true);
+            if (!e.target.files || e.target.files.length === 0) return;
+            const file = e.target.files[0];
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `${folder}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('salon-assets') // Bucket name stays the same for compatibility
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+                .from('salon-assets')
+                .getPublicUrl(filePath);
+
+            onUpload(data.publicUrl);
+            showMessage('success', 'Image uploaded successfully!');
+        } catch (error) {
+            showMessage('error', 'Error uploading image: ' + error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="relative inline-block">
+            <input
+                type="file"
+                accept="image/*"
+                onChange={handleUpload}
+                disabled={uploading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+            <button
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-opacity-90 disabled:opacity-50 transition-all" style={{ backgroundColor: "var(--primary)" }}
+            >
+                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Image size={16} />}
+                {uploading ? 'Uploading...' : 'Upload Image'}
+            </button>
+        </div>
+    );
+};
+
+const VideoUploader = ({ onUpload, folder = 'videos', showMessage }) => {
+    const [uploading, setUploading] = useState(false);
+
+    const handleUpload = async (e) => {
+        try {
+            setUploading(true);
+            if (!e.target.files || e.target.files.length === 0) return;
+            const file = e.target.files[0];
+
+            // Validate file type
+            if (!file.type.startsWith('video/')) {
+                showMessage('error', 'Please select a valid video file');
+                return;
+            }
+
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `${folder}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('salon-assets')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+                .from('salon-assets')
+                .getPublicUrl(filePath);
+
+            onUpload(data.publicUrl);
+            showMessage('success', 'Video uploaded successfully!');
+        } catch (error) {
+            showMessage('error', 'Error uploading video: ' + error.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="relative inline-block">
+            <input
+                type="file"
+                accept="video/*"
+                onChange={handleUpload}
+                disabled={uploading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+            <button
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-opacity-90 disabled:opacity-50 transition-all" style={{ backgroundColor: "var(--primary)" }}
+            >
+                {uploading ? <Loader2 size={16} className="animate-spin" /> : <Image size={16} />}
+                {uploading ? 'Uploading...' : 'Upload Video'}
+            </button>
+        </div>
+    );
+};
+
+const SectionConfig = ({ sectionId, settings, setSettings, showMessage, defaultMenuName, defaultHeadingName, description, theme }) => {
+    const [isCollapsed, setIsCollapsed] = useState(true);
+    const showKey = `show_${sectionId}_section`;
+    const menuNameKey = `${sectionId}_menu_name`;
+    const headingNameKey = `${sectionId}_heading_name`;
+    const bgColorKey = `${sectionId}_bg_color`;
+    const textColorKey = `${sectionId}_text_color`;
+
+    const isVisible = settings?.[showKey] !== 'false';
+    const menuName = settings?.[menuNameKey] || defaultMenuName;
+    const headingName = settings?.[headingNameKey] || defaultHeadingName;
+    const bgColor = settings?.[bgColorKey] || '';
+    const textColor = settings?.[textColorKey] || '';
+
+    const themeColors = [
+        { name: 'Primary', value: 'var(--primary)', hex: theme?.['--primary'] || 'var(--primary)' },
+        { name: 'Accent', value: 'var(--accent)', hex: theme?.['--accent'] || '#EAE0D5' },
+        { name: 'Soft Cream', value: 'var(--secondary)', hex: theme?.['--secondary'] || '#F5F1ED' },
+        { name: 'Dark Text', value: 'var(--text-main)', hex: theme?.['--text-main'] || '#2A1D15' },
+        { name: 'Light Text', value: 'var(--text-contrast)', hex: theme?.['--text-contrast'] || '#FFFFFF' },
+    ];
+
+    const handleSaveSetting = async (key, value) => {
+        try {
+            // 1. Save to site_settings
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key, value }, { onConflict: 'key' });
+
+            if (error) throw error;
+
+            // 2. If this is a visibility toggle, sync with site_page_sections
+            if (key === showKey) {
+                const isEnabled = value !== 'false';
+                await supabase
+                    .from('site_page_sections')
+                    .update({ enabled: isEnabled })
+                    .eq('id', sectionId);
+
+                // Also sync custom_sections if applicable
+                await supabase
+                    .from('custom_sections')
+                    .update({ enabled: isEnabled })
+                    .eq('id', sectionId);
+            }
+
+            setSettings(prev => ({ ...prev, [key]: value }));
+            showMessage('success', `${sectionId.charAt(0).toUpperCase() + sectionId.slice(1)} setting updated!`);
+        } catch (err) {
+            console.error('Error saving setting:', err);
+            showMessage('error', err.message);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
+            <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Section Configuration</h3>
+                    {!isVisible && <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-[10px] font-bold rounded uppercase">Hidden</span>}
+                </div>
+                <ChevronDown
+                    size={20}
+                    className={`text-gray-500 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                />
+            </button>
+
+            {!isCollapsed && (
+                <div className="px-6 pb-6 space-y-6">
+                    {/* Toggle Section - Full Width */}
+                    <div className="flex items-center justify-between p-4 bg-secondary rounded-lg border border-stone-100">
+                        <div>
+                            <p className="font-medium text-gray-900">Show Section</p>
+                            <p className="text-xs text-gray-500">{description || `Enable or disable ${sectionId} on the website`}</p>
+                        </div>
+                        <button
+                            onClick={() => handleSaveSetting(showKey, isVisible ? 'false' : 'true')}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full border-2 transition-colors ${isVisible ? 'border-[var(--primary)]' : 'border-gray-200'}`}
+                            style={{ backgroundColor: isVisible ? 'var(--primary)' : '#E5E7EB' }}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isVisible ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+
+                    {/* Name Fields - Side by Side */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-gray-500 uppercase">Menu Name</label>
+                            <div className="flex gap-2">
+                                <input
+                                    value={menuName}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, [menuNameKey]: e.target.value }))}
+                                    onBlur={(e) => handleSaveSetting(menuNameKey, e.target.value)}
+                                    placeholder={`e.g. ${defaultMenuName}`}
+                                    className="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                                />
+                            </div>
+                            <p className="text-xs text-gray-400">Text shown in navigation menu</p>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium text-gray-500 uppercase">Section Heading</label>
+                            <div className="flex gap-2">
+                                <input
+                                    value={headingName}
+                                    onChange={(e) => setSettings(prev => ({ ...prev, [headingNameKey]: e.target.value }))}
+                                    onBlur={(e) => handleSaveSetting(headingNameKey, e.target.value)}
+                                    placeholder={`e.g. ${defaultHeadingName}`}
+                                    className="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                                />
+                            </div>
+                            <p className="text-xs text-gray-400">Text shown as page section title</p>
+                        </div>
+                    </div>
+
+                    {/* Color Selection - Side by Side */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-gray-100 mt-2">
+                        <div className="space-y-3">
+                            <label className="text-xs font-medium text-gray-500 uppercase">Background Color</label>
+                            <div className="flex flex-wrap gap-2">
+                                {themeColors.map(color => (
+                                    <button
+                                        key={color.value}
+                                        onClick={() => handleSaveSetting(bgColorKey, color.value)}
+                                        className={`w-8 h-8 rounded-full border-2 transition-all ${bgColor === color.value ? 'border-primary ring-2 ring-primary ring-offset-2 scale-110' : 'border-gray-200 hover:scale-105'}`}
+                                        style={{ backgroundColor: color.hex }}
+                                        title={color.name}
+                                    />
+                                ))}
+                                <button
+                                    onClick={() => handleSaveSetting(bgColorKey, '')}
+                                    className={`px-3 h-8 rounded-full border-2 text-[10px] font-bold uppercase transition-all ${!bgColor ? 'border-primary bg-gray-50' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                                    title="Automatic"
+                                >
+                                    Auto
+                                </button>
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            <label className="text-xs font-medium text-gray-500 uppercase">Text Color</label>
+                            <div className="flex flex-wrap gap-2">
+                                {themeColors.map(color => (
+                                    <button
+                                        key={color.value}
+                                        onClick={() => handleSaveSetting(textColorKey, color.value)}
+                                        className={`w-8 h-8 rounded-full border-2 transition-all ${textColor === color.value ? 'border-primary ring-2 ring-primary ring-offset-2 scale-110' : 'border-gray-200 hover:scale-105'}`}
+                                        style={{ backgroundColor: color.hex }}
+                                        title={color.name}
+                                    />
+                                ))}
+                                <button
+                                    onClick={() => handleSaveSetting(textColorKey, '')}
+                                    className={`px-3 h-8 rounded-full border-2 text-[10px] font-bold uppercase transition-all ${!textColor ? 'border-primary bg-gray-50' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                                    title="Automatic"
+                                >
+                                    Auto
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Helper functions for opening hours
+const getTimeLabel = (hour) => {
+    if (hour === 12) return '12 PM';
+    if (hour === 0) return '12 AM';
+    return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
+};
+
+const formatOpeningHours = (selectedSlots) => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+
+    // Convert grid to time ranges per day
+    const dayRanges = {};
+    days.forEach(day => {
+        const ranges = [];
+        let start = null;
+
+        selectedSlots[day]?.forEach((selected, idx) => {
+            if (selected && start === null) {
+                start = hours[idx];
+            } else if (!selected && start !== null) {
+                ranges.push({ start, end: hours[idx] });
+                start = null;
+            }
+        });
+
+        // Handle case where selection goes to end
+        if (start !== null) {
+            ranges.push({ start, end: hours[hours.length - 1] + 1 });
+        }
+
+        if (ranges.length > 0) {
+            dayRanges[day] = ranges;
+        }
+    });
+
+    // Group consecutive days with identical hours
+    const grouped = [];
+    let currentGroup = null;
+
+    days.forEach(day => {
+        const ranges = dayRanges[day];
+        const rangesStr = ranges ? JSON.stringify(ranges) : null;
+
+        if (currentGroup && currentGroup.rangesStr === rangesStr) {
+            currentGroup.days.push(day);
+        } else {
+            if (currentGroup) {
+                grouped.push(currentGroup);
+            }
+            currentGroup = ranges ? { days: [day], ranges, rangesStr } : null;
+        }
+    });
+
+    if (currentGroup) {
+        grouped.push(currentGroup);
+    }
+
+    // Format to text
+    return grouped.map(group => {
+        const dayStr = group.days.length === 1
+            ? group.days[0]
+            : `${group.days[0]}-${group.days[group.days.length - 1]}`;
+
+        const timeStr = group.ranges.map(r =>
+            `${getTimeLabel(r.start)} - ${getTimeLabel(r.end)}`
+        ).join(', ');
+
+        return `${dayStr}: ${timeStr}`;
+    }).join(', ') || 'Closed';
+};
+
+const parseOpeningHours = (text) => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const hours = Array.from({ length: 13 }, (_, i) => i + 8);
+    const selectedSlots = {};
+
+    // Initialize all days as closed
+    days.forEach(day => {
+        selectedSlots[day] = new Array(13).fill(false);
+    });
+
+    if (!text || text.toLowerCase() === 'closed') return selectedSlots;
+
+    // Parse text (basic implementation - can be enhanced)
+    // Expected format: "Mon-Fri: 9 AM - 6 PM, Sat: 10 AM - 4 PM"
+    const parts = text.split(',').map(p => p.trim());
+
+    parts.forEach(part => {
+        const match = part.match(/([A-Za-z\-]+):\s*(.+)/);
+        if (!match) return;
+
+        const [, dayPart, timePart] = match;
+        const timeRanges = timePart.split(',').map(t => t.trim());
+
+        // Parse day range
+        let targetDays = [];
+        if (dayPart.includes('-')) {
+            const [start, end] = dayPart.split('-').map(d => d.trim());
+            const startIdx = days.indexOf(start);
+            const endIdx = days.indexOf(end);
+            if (startIdx !== -1 && endIdx !== -1) {
+                for (let i = startIdx; i <= endIdx; i++) {
+                    targetDays.push(days[i]);
+                }
+            }
+        } else {
+            const day = days.find(d => dayPart.includes(d));
+            if (day) targetDays.push(day);
+        }
+
+        // Parse time ranges
+        timeRanges.forEach(timeRange => {
+            const timeMatch = timeRange.match(/(\d+)\s*(AM|PM)\s*-\s*(\d+)\s*(AM|PM)/i);
+            if (!timeMatch) return;
+
+            let [, startHour, startPeriod, endHour, endPeriod] = timeMatch;
+            startHour = parseInt(startHour);
+            endHour = parseInt(endHour);
+
+            // Convert to 24-hour
+            if (startPeriod.toUpperCase() === 'PM' && startHour !== 12) startHour += 12;
+            if (startPeriod.toUpperCase() === 'AM' && startHour === 12) startHour = 0;
+            if (endPeriod.toUpperCase() === 'PM' && endHour !== 12) endHour += 12;
+            if (endPeriod.toUpperCase() === 'AM' && endHour === 12) endHour = 0;
+
+            // Mark slots as selected
+            targetDays.forEach(day => {
+                hours.forEach((hour, idx) => {
+                    if (hour >= startHour && hour < endHour) {
+                        selectedSlots[day][idx] = true;
+                    }
+                });
+            });
+        });
+    });
+
+    return selectedSlots;
+};
+
+// OpeningHoursPicker Component
+const OpeningHoursPicker = ({ initialValue, onSave, showMessage }) => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+
+    const [selectedSlots, setSelectedSlots] = useState(() => parseOpeningHours(initialValue));
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragMode, setDragMode] = useState('select'); // 'select' or 'deselect'
+
+    const handleMouseDown = (day, hourIdx) => {
+        setIsDragging(true);
+        const currentState = selectedSlots[day][hourIdx];
+        setDragMode(currentState ? 'deselect' : 'select');
+        toggleSlot(day, hourIdx);
+    };
+
+    const handleMouseEnter = (day, hourIdx) => {
+        if (isDragging) {
+            toggleSlot(day, hourIdx);
+        }
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    const toggleSlot = (day, hourIdx) => {
+        setSelectedSlots(prev => ({
+            ...prev,
+            [day]: prev[day].map((selected, idx) =>
+                idx === hourIdx
+                    ? (dragMode === 'select' ? true : false)
+                    : selected
+            )
+        }));
+    };
+
+    const handleSaveHours = async () => {
+        const formatted = formatOpeningHours(selectedSlots);
+        await onSave(formatted);
+    };
+
+    const formattedPreview = formatOpeningHours(selectedSlots);
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <Clock size={16} />
+                    Opening Hours
+                </label>
+            </div>
+
+            {/* Grid */}
+            <div className="overflow-x-auto mb-4" onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+                <div className="min-w-[600px]">
+                    {/* Header row */}
+                    <div className="grid grid-cols-14 gap-1 mb-2">
+                        <div className="text-xs font-medium text-gray-600 p-2"></div>
+                        {hours.map(hour => (
+                            <div key={hour} className="text-xs font-medium text-gray-600 text-center p-2">
+                                {hour > 12 ? hour - 12 : hour}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Day rows */}
+                    {days.map(day => (
+                        <div key={day} className="grid grid-cols-14 gap-1 mb-1">
+                            <div className="text-sm font-medium text-gray-700 p-2 flex items-center">
+                                {day}
+                            </div>
+                            {hours.map((hour, hourIdx) => (
+                                <div
+                                    key={hourIdx}
+                                    onMouseDown={() => handleMouseDown(day, hourIdx)}
+                                    onMouseEnter={() => handleMouseEnter(day, hourIdx)}
+                                    className={`
+                                        h-10 rounded cursor-pointer transition-all select-none
+                                        ${selectedSlots[day][hourIdx]
+                                            ? 'bg-primary text-white border-stone-900'
+                                            : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+                                        }
+                                        border active:scale-95
+                                    `}
+                                    style={selectedSlots[day][hourIdx] ? { backgroundColor: 'var(--primary)' } : {}}
+                                />
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Preview */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                <div className="text-xs font-medium text-amber-900 mb-1">Preview:</div>
+                <div className="text-sm text-amber-800">{formattedPreview}</div>
+            </div>
+
+            {/* Save button */}
+            <button
+                onClick={() => handleSaveHours()}
+                className="w-full px-4 py-3 bg-primary text-white rounded-lg hover:shadow-lg transition-all font-medium"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Set Opening Hours
+            </button>
+        </div>
+    );
+};
+
+const OpeningHoursTab = ({ settings, setSettings, showMessage }) => {
+    const handleSaveOpeningHours = async (formattedHours) => {
+        try {
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'opening_hours', value: formattedHours }, { onConflict: 'key' });
+            if (error) throw error;
+            showMessage('success', 'Opening hours updated!');
+            setSettings(prev => ({ ...prev, opening_hours: formattedHours }));
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    const handleToggleVisibility = async (enabled) => {
+        try {
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'show_opening_hours', value: String(enabled) }, { onConflict: 'key' });
+            if (error) throw error;
+            setSettings(prev => ({ ...prev, show_opening_hours: String(enabled) }));
+            showMessage('success', `Opening hours ${enabled ? 'enabled' : 'disabled'} on site`);
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    const isVisible = settings.show_opening_hours !== 'false';
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Opening Hours</h2>
+
+            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm mb-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-medium text-gray-900">Show on Website</h3>
+                        <p className="text-sm text-gray-500 text-pretty max-w-md mt-1">
+                            Toggle whether the opening hours are displayed in the hero and footer sections.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => handleToggleVisibility(!isVisible)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isVisible ? 'bg-primary' : 'bg-gray-400'}`}
+                        style={isVisible ? { backgroundColor: 'var(--primary)' } : { backgroundColor: '#9ca3af' }}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${isVisible ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+            </div>
+
+            <OpeningHoursPicker
+                initialValue={settings.opening_hours || ''}
+                onSave={handleSaveOpeningHours}
+                showMessage={showMessage}
+            />
+        </motion.div>
+    );
+};
+
+const PhoneNumbersEditor = ({ showMessage, settings, setSettings }) => {
+    const [phoneNumbers, setPhoneNumbers] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchPhoneNumbers();
+    }, []);
+
+    const fetchPhoneNumbers = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('phone_numbers')
+                .select('*')
+                .order('display_order');
+
+            if (error) throw error;
+            setPhoneNumbers(data || []);
+        } catch (err) {
+            console.error('Error fetching phone numbers:', err);
+            showMessage('error', 'Error loading phone numbers');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAdd = async () => {
+        try {
+            const maxOrder = phoneNumbers.length > 0
+                ? Math.max(...phoneNumbers.map(p => p.display_order))
+                : 0;
+
+            const { data, error } = await supabase
+                .from('phone_numbers')
+                .insert([{ number: '', type: 'phone', display_order: maxOrder + 1 }])
+                .select()
+                .single();
+
+            if (error) throw error;
+            setPhoneNumbers([...phoneNumbers, data]);
+            showMessage('success', 'Phone number added');
+        } catch (err) {
+            console.error('Error adding phone number:', err);
+            showMessage('error', 'Error adding phone number');
+        }
+    };
+
+    const handleUpdate = async (id, field, value) => {
+        try {
+            if (field === 'is_primary' && value === true) {
+                // Special handling for setting a new primary
+                const { error } = await supabase.from('phone_numbers').update({ is_primary: false }).not('id', 'eq', id);
+                if (error) throw error;
+
+                const { error: updateError } = await supabase.from('phone_numbers').update({ is_primary: true }).eq('id', id);
+                if (updateError) throw updateError;
+
+                // Sync to site_settings.phone for backward compatibility
+                const phoneObj = phoneNumbers.find(p => p.id === id);
+                if (phoneObj && phoneObj.number) {
+                    await supabase.from('site_settings').upsert({ key: 'phone', value: phoneObj.number }, { onConflict: 'key' });
+                    if (setSettings) setSettings(prev => ({ ...prev, phone: phoneObj.number }));
+                }
+
+                setPhoneNumbers(phoneNumbers.map(p => ({
+                    ...p,
+                    is_primary: p.id === id
+                })));
+                showMessage('success', 'Salon phone updated');
+                return;
+            }
+
+            const { error } = await supabase
+                .from('phone_numbers')
+                .update({ [field]: value })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            setPhoneNumbers(phoneNumbers.map(p =>
+                p.id === id ? { ...p, [field]: value } : p
+            ));
+
+            // If updating number and it is primary, sync to site_settings
+            const updatedPhone = phoneNumbers.find(p => p.id === id);
+            if (field === 'number' && updatedPhone?.is_primary) {
+                await supabase.from('site_settings').upsert({ key: 'phone', value: value }, { onConflict: 'key' });
+                if (setSettings) setSettings(prev => ({ ...prev, phone: value }));
+            }
+
+            showMessage('success', 'Phone number updated');
+        } catch (err) {
+            console.error('Error updating phone number:', err);
+            showMessage('error', 'Error updating phone number');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this phone number?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('phone_numbers')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            setPhoneNumbers(phoneNumbers.filter(p => p.id !== id));
+            showMessage('success', 'Phone number deleted');
+        } catch (err) {
+            console.error('Error deleting phone number:', err);
+            showMessage('error', 'Error deleting phone number');
+        }
+    };
+
+    const getTypeButtonClass = (currentType, buttonType) => {
+        const isActive = currentType === buttonType;
+        return `px-3 py-1 text-xs font-medium rounded transition-all ${isActive
+            ? 'text-white border-2'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-2 border-transparent'
+            }`;
+    };
+
+    if (loading) {
+        return (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <Loader2 size={24} className="animate-spin text-primary mx-auto" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <Phone size={16} />
+                    Phone Numbers
+                </label>
+                <button
+                    onClick={handleAdd}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-opacity-90 transition-all"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                >
+                    <Plus size={14} />
+                    Add Number
+                </button>
+            </div>
+
+            {phoneNumbers.length === 0 ? (
+                <div className="text-sm text-gray-500 text-center py-8">
+                    No phone numbers added yet. Click "Add Number" to get started.
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {phoneNumbers.map((phone) => (
+                        <div key={phone.id} className="flex items-center gap-3 p-3 bg-secondary rounded-lg border border-stone-100">
+                            <input
+                                type="text"
+                                value={phone.number}
+                                onChange={(e) => handleUpdate(phone.id, 'number', e.target.value)}
+                                placeholder="Enter phone number"
+                                className="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                            />
+                            <button
+                                onClick={() => handleUpdate(phone.id, 'is_primary', !phone.is_primary)}
+                                className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all ${phone.is_primary
+                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border border-transparent'
+                                    }`}
+                                title={phone.is_primary ? "This is the primary salon number used in messages" : "Set as primary salon number"}
+                                disabled={phone.is_primary}
+                            >
+                                <Star size={14} className={phone.is_primary ? 'fill-amber-500' : ''} />
+                                {phone.is_primary ? 'Salon Phone' : 'Set as Salon'}
+                            </button>
+
+                            <div className="flex gap-1">
+                                <button
+                                    onClick={() => handleUpdate(phone.id, 'type', 'phone')}
+                                    className={getTypeButtonClass(phone.type, 'phone')}
+                                    style={phone.type === 'phone' ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)' } : {}}
+                                >
+                                    Phone
+                                </button>
+                                <button
+                                    onClick={() => handleUpdate(phone.id, 'type', 'whatsapp')}
+                                    className={getTypeButtonClass(phone.type, 'whatsapp')}
+                                    style={phone.type === 'whatsapp' ? { backgroundColor: '#25D366', borderColor: '#25D366' } : {}}
+                                >
+                                    WhatsApp
+                                </button>
+                                <button
+                                    onClick={() => handleUpdate(phone.id, 'type', 'both')}
+                                    className={getTypeButtonClass(phone.type, 'both')}
+                                    style={phone.type === 'both' ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)' } : {}}
+                                >
+                                    Both
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => handleDelete(phone.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const PrivacyPolicyEditor = ({ settings, setSettings, showMessage, theme }) => {
+    const [content, setContent] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchPrivacyPolicy();
+    }, []);
+
+    const fetchPrivacyPolicy = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('site_settings')
+                .select('value')
+                .eq('key', 'privacy_policy')
+                .single();
+
+            if (error) throw error;
+            setContent(data?.value || '');
+        } catch (err) {
+            console.error('Error fetching privacy policy:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        try {
+            setSaving(true);
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'privacy_policy', value: content }, { onConflict: 'key' });
+
+            if (error) throw error;
+            showMessage('success', 'Privacy policy updated successfully!');
+        } catch (err) {
+            console.error('Error saving privacy policy:', err);
+            showMessage('error', 'Error saving privacy policy: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 size={40} className="animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="privacy"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Privacy Policy"
+                defaultHeadingName="Privacy Policy"
+                description="Enable or disable the privacy policy link in the footer and customize its name."
+                theme={theme}
+            />
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                    <Shield size={24} />
+                    Privacy Policy
+                </h2>
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                >
+                    {saving ? (
+                        <>
+                            <Loader2 size={18} className="animate-spin" />
+                            Saving...
+                        </>
+                    ) : (
+                        <>
+                            <Save size={18} />
+                            Save Privacy Policy
+                        </>
+                    )}
+                </button>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <div className="mb-4">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Privacy Policy Content
+                    </label>
+                    <p className="text-xs text-gray-500 mb-3">
+                        Enter your privacy policy here. This will be displayed in a modal when users click "Privacy Policy" in the footer.
+                    </p>
+                </div>
+
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Enter your privacy policy content here..."
+                    className="w-full h-[500px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none font-mono text-sm"
+                    style={{ fontFamily: 'monospace' }}
+                />
+
+                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                    <span>{content.length} characters</span>
+                    <span>{content.split('\n').length} lines</span>
+                </div>
+
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                        <Info size={16} className="inline mr-2" />
+                        <strong>Tip:</strong> Line breaks will be preserved when displayed to users.
+                    </p>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+const TermsAndConditionsEditor = ({ settings, setSettings, showMessage, theme }) => {
+    const [content, setContent] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchTermsAndConditions();
+    }, []);
+
+    const fetchTermsAndConditions = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('site_settings')
+                .select('value')
+                .eq('key', 'terms_and_conditions')
+                .single();
+
+            if (error) throw error;
+            setContent(data?.value || '');
+        } catch (err) {
+            console.error('Error fetching terms and conditions:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        try {
+            setSaving(true);
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'terms_and_conditions', value: content }, { onConflict: 'key' });
+
+            if (error) throw error;
+            showMessage('success', 'Terms and conditions updated successfully!');
+        } catch (err) {
+            console.error('Error saving terms and conditions:', err);
+            showMessage('error', 'Error saving terms and conditions: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 size={40} className="animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="terms"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Terms & Conditions"
+                defaultHeadingName="Terms & Conditions"
+                description="Enable or disable the terms and conditions link in the footer and customize its name."
+                theme={theme}
+            />
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                    <Shield size={24} />
+                    Terms & Conditions
+                </h2>
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                >
+                    {saving ? (
+                        <>
+                            <Loader2 size={18} className="animate-spin" />
+                            Saving...
+                        </>
+                    ) : (
+                        <>
+                            <Save size={18} />
+                            Save Terms & Conditions
+                        </>
+                    )}
+                </button>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <div className="mb-4">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Terms & Conditions Content
+                    </label>
+                    <p className="text-xs text-gray-500 mb-3">
+                        Enter your terms and conditions here. This will be displayed in a modal when users click "Terms & Conditions" in the footer.
+                    </p>
+                </div>
+
+                <textarea
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Enter your terms and conditions content here..."
+                    className="w-full h-[500px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none font-mono text-sm"
+                    style={{ fontFamily: 'monospace' }}
+                />
+
+                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                    <span>{content.length} characters</span>
+                    <span>{content.split('\n').length} lines</span>
+                </div>
+
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                        <Info size={16} className="inline mr-2" />
+                        <strong>Tip:</strong> Line breaks will be preserved when displayed to users.
+                    </p>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+const BrandingEditor = ({ settings, onSave, showMessage }) => {
+    const [logoUrl, setLogoUrl] = useState(settings.logo_url);
+    const [size, setSize] = useState(parseInt(settings.logo_size) || 85);
+
+    const handleLogoUpload = (url) => {
+        setLogoUrl(url);
+        onSave('logo_url', url);
+    };
+
+    const handleSizeChange = (e) => {
+        const newSize = parseInt(e.target.value) || 0;
+        setSize(newSize);
+    };
+
+    const saveSize = () => {
+        onSave('logo_size', size.toString());
+    };
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-full">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <Maximize2 size={18} /> Logo Branding
+            </h3>
+
+            <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0">
+                        <ImageUploader folder="branding" onUpload={handleLogoUpload} showMessage={showMessage} />
+                    </div>
+                    <div className="flex flex-col gap-1 flex-grow">
+                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Logo Size (px)</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="number"
+                                value={size}
+                                onChange={handleSizeChange}
+                                className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"
+                            />
+                            <button
+                                onClick={saveSize}
+                                className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all text-sm"
+                                style={{ backgroundColor: 'var(--primary)' }}
+                            >
+                                <Save size={16} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="relative rounded-lg flex items-center justify-center p-4 bg-secondary border border-dashed border-gray-300 min-h-[140px]">
+                    <div
+                        className="relative shadow-md rounded-full bg-white flex items-center justify-center overflow-hidden border border-gray-100"
+                        style={{ width: `${size}px`, height: `${size}px`, maxWidth: '100%', maxHeight: '120px' }}
+                    >
+                        <img src={logoUrl} alt="Logo Preview" className="w-full h-full object-cover" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ThemeTab = ({ showMessage }) => {
+    const { theme, updateTheme, saveAsDefault, resetToDefault, resetToFactory } = useTheme();
+    // Initialize local state with global theme
+    const [localTheme, setLocalTheme] = useState(theme);
+
+    // Sync local state when global theme changes (e.g. on initial load)
+    useEffect(() => {
+        setLocalTheme(theme);
+    }, [theme]);
+
+    const colors = [
+        { label: 'Primary Brand Color', var: '--primary' },
+        { label: 'Primary Hover Color', var: '--primary-hover' },
+        { label: 'Accent Color', var: '--accent' },
+        { label: 'Background Color', var: '--secondary' },
+        { label: 'Navbar Background', var: '--navbar-bg' },
+        { label: 'Navbar Text Color', var: '--navbar-text' },
+        { label: 'Headings & Dark Text', var: '--text-main' },
+        { label: 'Light Text', var: '--text-contrast' },
+    ];
+
+    const handleChange = (cssVar, value) => {
+        setLocalTheme(prev => ({ ...prev, [cssVar]: value }));
+    };
+
+    const handleSave = async () => {
+        const result = await updateTheme(localTheme);
+        if (result?.error) {
+            showMessage('error', `Failed to save theme: ${result.error.message || 'Unknown error'}`);
+        } else {
+            showMessage('success', 'Theme saved successfully!');
+        }
+    };
+
+    const handleSaveDefault = async () => {
+        if (!window.confirm('Are you sure you want to save the current settings as the new default?')) return;
+        await saveAsDefault(localTheme);
+        showMessage('success', 'Current theme saved as default.');
+    };
+
+    const handleResetDefault = async () => {
+        if (!window.confirm('Reset to your saved default theme? Unsaved changes will be lost.')) return;
+        const defaulted = await resetToDefault();
+        setLocalTheme(defaulted);
+        showMessage('success', 'Reset to saved default.');
+    };
+
+    const handleResetFactory = async () => {
+        if (!window.confirm('Reset to original factory colors? This cannot be undone.')) return;
+        const factory = await resetToFactory();
+        setLocalTheme(factory);
+        showMessage('success', 'Reset to factory original colors.');
+    };
+
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Theme Settings</h2>
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {colors.map((color) => (
+                        <div key={color.var} className="flex flex-col gap-2">
+                            <label className="text-sm font-medium text-gray-700">{color.label}</label>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="color"
+                                    value={localTheme[color.var] || '#000000'}
+                                    onChange={(e) => handleChange(color.var, e.target.value)}
+                                    className="h-10 w-20 rounded border border-gray-300 cursor-pointer"
+                                />
+                                <input
+                                    type="text"
+                                    value={localTheme[color.var] || ''}
+                                    onChange={(e) => handleChange(color.var, e.target.value)}
+                                    className="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-4">Typography</h3>
+                <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-medium text-gray-700">Heading Font</label>
+                            <select
+                                value={localTheme['--font-heading'] || "'Playfair Display', serif"}
+                                onChange={(e) => handleChange('--font-heading', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                            >
+                                <option value="'Playfair Display', serif">Playfair Display (Luxury Serif)</option>
+                                <option value="'Outfit', sans-serif">Outfit (Modern Sans)</option>
+                                <option value="'Cormorant Garamond', serif">Cormorant Garamond (Elegant Serif)</option>
+                                <option value="'Prata', serif">Prata (Classic Serif)</option>
+                                <option value="'Inter', sans-serif">Inter (Minimalist Sans)</option>
+                                <option value="'Montserrat', sans-serif">Montserrat (Geometric Sans)</option>
+                            </select>
+                            <div
+                                className="mt-2 p-3 bg-white border border-gray-200 rounded text-center shadow-sm flex items-center justify-center"
+                                style={{
+                                    fontFamily: localTheme['--font-heading'] || "'Playfair Display', serif",
+                                    minHeight: '100px'
+                                }}
+                            >
+                                <p className="text-xl">Premium Services & Professional Experience</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-sm font-medium text-gray-700">Body Font</label>
+                            <select
+                                value={localTheme['--font-body'] || "'Inter', sans-serif"}
+                                onChange={(e) => handleChange('--font-body', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                            >
+                                <option value="'Inter', sans-serif">Inter (Sans-serif)</option>
+                                <option value="'Open Sans', sans-serif">Open Sans (Sans-serif)</option>
+                                <option value="'Roboto', sans-serif">Roboto (Sans-serif)</option>
+                                <option value="'Lato', sans-serif">Lato (Sans-serif)</option>
+                                <option value="'Montserrat', sans-serif">Montserrat (Sans-serif)</option>
+                                <option value="'Playfair Display', serif">Playfair Display (Serif)</option>
+                            </select>
+                            <div
+                                className="mt-2 p-3 bg-white border border-gray-200 rounded shadow-sm flex items-center justify-center text-center"
+                                style={{
+                                    fontFamily: localTheme['--font-body'] || "'Inter', sans-serif",
+                                    minHeight: '100px'
+                                }}
+                            >
+                                <p className="text-sm leading-relaxed">Experience exceptional care and professional services tailored to your unique needs. We provide high-quality results in a premium and welcoming environment.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-gray-100">
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleResetFactory}
+                            className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-all"
+                        >
+                            Reset to Original
+                        </button>
+                        <button
+                            onClick={handleResetDefault}
+                            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium transition-all"
+                        >
+                            Reset to Default
+                        </button>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleSaveDefault}
+                            className="px-4 py-2 text-primary/80 hover:bg-secondary border border-primary/20 rounded-lg text-sm font-medium transition-all"
+                        >
+                            Save as Default
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg hover:shadow-lg transition-all font-medium"
+                            style={{ backgroundColor: 'var(--primary)' }}
+                        >
+                            <Save size={18} />
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div >
+        </motion.div >
+    );
+};
+
+const PaymentMethodsEditor = ({ settings, onSave, showMessage }) => {
+    const availableMethods = [
+        { id: 'visa', label: 'Visa', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg' },
+        { id: 'mastercard', label: 'Mastercard', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg' },
+        { id: 'paypal', label: 'PayPal', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg' },
+        { id: 'applepay', label: 'Apple Pay', logo: 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Apple_Pay_logo.svg' },
+        { id: 'googlepay', label: 'Google Pay', logo: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Google_Pay_Logo_%282020%29.svg' },
+        { id: 'amex', label: 'American Express', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/American_Express_logo_%282018%29.svg' },
+    ];
+
+    const currentMethods = (settings.payment_methods || '').split(',').filter(Boolean);
+
+    const toggleMethod = (id) => {
+        let newMethods;
+        if (currentMethods.includes(id)) {
+            newMethods = currentMethods.filter(m => m !== id);
+        } else {
+            newMethods = [...currentMethods, id];
+        }
+        onSave('payment_methods', newMethods.join(','));
+    };
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <Database size={18} /> Accepted Payment Methods
+            </h3>
+            <p className="text-xs text-gray-500 mb-6">
+                Select the payment methods you accept. These icons will be displayed in the website footer.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                {availableMethods.map((method) => {
+                    const isActive = currentMethods.includes(method.id);
+                    return (
+                        <button
+                            key={method.id}
+                            onClick={() => toggleMethod(method.id)}
+                            className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all group ${isActive
+                                ? 'border-primary bg-secondary'
+                                : 'border-gray-100 hover:border-gray-200'
+                                }`}
+                        >
+                            <div className={`h-10 flex items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-40 grayscale group-hover:grayscale-0'}`}>
+                                <img src={method.logo} alt={method.label} className="max-h-full max-w-full" />
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isActive ? 'text-primary' : 'text-gray-400'}`}>
+                                {method.label}
+                            </span>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${isActive ? 'bg-primary border-primary text-white' : 'border-gray-300'}`}>
+                                {isActive && <Check size={12} />}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const GeneralTab = ({ settings, setSettings, showMessage, theme }) => {
+
+    const handleSave = async (key, value) => {
+        try {
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key, value }, { onConflict: 'key' });
+            if (error) throw error;
+            showMessage('success', `${key.replace('_', ' ')} updated!`);
+            setSettings(prev => ({ ...prev, [key]: value }));
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">General Settings</h2>
+
+            {/* Kill Switch Status - Read Only */}
+            <div className={`rounded-lg border-2 p-6 shadow-sm mb-6 ${settings.site_enabled === 'false' ? 'bg-red-50 border-red-300' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${settings.site_enabled === 'false' ? 'bg-red-100' : 'bg-green-100'}`}>
+                        <AlertTriangle size={24} className={settings.site_enabled === 'false' ? 'text-red-600' : 'text-green-600'} />
+                    </div>
+                    <div>
+                        <h3 className={`font-semibold text-lg ${settings.site_enabled === 'false' ? 'text-red-900' : 'text-gray-900'}`}>
+                            Website Status: {settings.site_enabled === 'false' ? 'DISABLED' : 'ACTIVE'}
+                        </h3>
+                        <p className={`text-sm ${settings.site_enabled === 'false' ? 'text-red-700' : 'text-gray-600'}`}>
+                            {settings.site_enabled === 'false'
+                                ? '⚠️ Website is currently DISABLED. Visitors see a maintenance screen.'
+                                : '✓ Website is currently ACTIVE and accessible to visitors.'
+                            }
+                        </p>
+                    </div>
+                </div>
+
+                {settings.site_enabled === 'false' && (
+                    <div className="mt-4 p-3 bg-red-100 border border-red-200 rounded-lg">
+                        <p className="text-xs text-red-800 font-medium">
+                            <Info size={14} className="inline mr-1" />
+                            To re-enable the website, update the 'site_enabled' setting in the database to 'true'.
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Hidden Admin Link Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 shadow-sm mb-6">
+                <div className="flex items-start gap-3">
+                    <div className="mt-1 text-blue-600">
+                        <Info size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-blue-900 text-lg">Hidden Admin Access</h3>
+                        <p className="text-blue-800 text-sm mt-1 leading-relaxed">
+                            For security and aesthetics, the link to this Admin Dashboard is hidden on the main website.
+                            <br />
+                            <strong>To access the dashboard:</strong> Double-click on the copyright text ("© 2024 ...") in the footer of the website.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Dedicated Business Name Editor */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                        <Scissors size={18} />
+                        Business Name
+                    </label>
+                    <div className="flex gap-3">
+                        <input
+                            type="text"
+                            placeholder="e.g business name"
+                            value={settings.business_name || ''}
+                            onChange={(e) => setSettings({ ...settings, business_name: e.target.value })}
+                            className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-lg font-medium"
+                        />
+                        <button
+                            onClick={() => handleSave('business_name', settings.business_name)}
+                            className="px-6 py-2 bg-primary text-white rounded-lg hover:shadow-lg transition-all font-medium flex items-center gap-2"
+                            style={{ backgroundColor: "var(--primary)" }}
+                        >
+                            <Save size={18} />
+                            Save
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                        <Calendar size={18} />
+                        Default Appointment View
+                    </label>
+                    <div className="flex gap-3">
+                        <select
+                            value={settings.default_appointment_view || 'list'}
+                            onChange={(e) => handleSave('default_appointment_view', e.target.value)}
+                            className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none h-[44px]"
+                        >
+                            <option value="list">List View</option>
+                            <option value="day">Day View</option>
+                            <option value="week">Week View</option>
+                            <option value="month">Month View</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Branding Editor - Full Width */}
+            <div className="mb-6">
+                <BrandingEditor
+                    settings={settings}
+                    onSave={handleSave}
+                    showMessage={showMessage}
+                />
+            </div>
+
+            {/* Hero Background & Intro Video Side-by-Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Hero Background */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-full flex flex-col">
+                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Image size={18} /> Hero Background
+                    </h3>
+                    <div className="flex flex-col gap-4 flex-grow">
+                        <div className="flex items-center gap-4">
+                            <ImageUploader
+                                folder="backgrounds"
+                                onUpload={(url) => handleSave('hero_bg_url', url)}
+                                showMessage={showMessage}
+                            />
+                            {settings.hero_bg_url && (
+                                <button
+                                    onClick={() => handleSave('hero_bg_url', '')}
+                                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-all"
+                                >
+                                    Remove
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                placeholder="Or paste image URL (e.g., direct image link)"
+                                value={settings.hero_bg_url || ''}
+                                onChange={(e) => setSettings({ ...settings, hero_bg_url: e.target.value })}
+                                className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-sm"
+                            />
+                            <button
+                                onClick={() => handleSave('hero_bg_url', settings.hero_bg_url)}
+                                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all" style={{ backgroundColor: "var(--primary)" }}
+                            >
+                                <Save size={18} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            Background image for your website's hero section.
+                        </p>
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200 bg-secondary shadow-sm">
+                            {settings.hero_bg_url ? (
+                                <>
+                                    <img src={settings.hero_bg_url} alt="Hero BG Preview" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-[var(--primary)]/60" />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="text-white/30 text-[10px] uppercase tracking-[0.2em] font-semibold">Hero Preview</div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                                    No image selected
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Intro Video */}
+                <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm h-full flex flex-col">
+                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Image size={18} /> Intro Video
+                    </h3>
+                    <div className="flex flex-col gap-4 flex-grow">
+                        <div className="flex items-center gap-4">
+                            <VideoUploader
+                                folder="videos"
+                                onUpload={(url) => handleSave('intro_video_url', url)}
+                                showMessage={showMessage}
+                            />
+                            {settings.intro_video_url && (
+                                <button
+                                    onClick={() => handleSave('intro_video_url', '')}
+                                    className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-all"
+                                >
+                                    Remove
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                placeholder="Or paste video URL (e.g., Instagram, direct MP4 link)"
+                                value={settings.intro_video_url || ''}
+                                onChange={(e) => setSettings({ ...settings, intro_video_url: e.target.value })}
+                                className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-sm"
+                            />
+                            <button
+                                onClick={() => handleSave('intro_video_url', settings.intro_video_url)}
+                                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all" style={{ backgroundColor: "var(--primary)" }}
+                            >
+                                <Save size={18} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                            Plays when users first visit your website.
+                        </p>
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200 bg-secondary shadow-sm">
+                            {settings.intro_video_url ? (
+                                <video
+                                    src={settings.intro_video_url}
+                                    controls
+                                    className="w-full h-full object-cover"
+                                    style={{ backgroundColor: 'var(--primary)' }}
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+                                    No video selected
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* General Fields Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {GENERAL_FIELDS.map(field => (
+                    <div key={field.key} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                            {field.icon}
+                            {field.label}
+                        </label>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                value={settings[field.key] || ''}
+                                onChange={(e) => setSettings({ ...settings, [field.key]: e.target.value })}
+                                className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            />
+                            <button
+                                onClick={() => handleSave(field.key, settings[field.key])}
+                                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all font-medium flex items-center gap-2"
+                                style={{ backgroundColor: "var(--primary)" }}
+                            >
+                                <Save size={18} /> Save
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Payment Methods - Full Width */}
+            <div className="mb-6">
+                <PaymentMethodsEditor
+                    settings={settings}
+                    onSave={handleSave}
+                    showMessage={showMessage}
+                />
+            </div>
+        </motion.div>
+    );
+};
+
+const ContactTab = ({ settings, setSettings, showMessage, theme }) => {
+    const handleSave = async (key, value) => {
+        try {
+            const { error } = await supabase
+                .from('site_settings')
+                .upsert({ key, value }, { onConflict: 'key' });
+            if (error) throw error;
+            showMessage('success', `${key.replace('_', ' ')} updated!`);
+            setSettings(prev => ({ ...prev, [key]: value }));
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">Contact Settings</h2>
+
+            {/* Contact Section Configuration */}
+            <SectionConfig
+                sectionId="contact"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Contact"
+                defaultHeadingName="Contact Us"
+                description="Enable or disable the contact section and customize its heading."
+                theme={theme}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {CONTACT_FIELDS.map(field => (
+                    <div key={field.key} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
+                            {field.icon}
+                            {field.label}
+                        </label>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                value={settings[field.key] || ''}
+                                onChange={(e) => setSettings({ ...settings, [field.key]: e.target.value })}
+                                className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            />
+                            <button
+                                onClick={() => handleSave(field.key, settings[field.key])}
+                                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all font-medium flex items-center gap-2"
+                                style={{ backgroundColor: "var(--primary)" }}
+                            >
+                                <Save size={18} /> Save
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Phone Numbers Editor - Full Width */}
+            <div className="mb-6">
+                <PhoneNumbersEditor
+                    showMessage={showMessage}
+                    settings={settings}
+                    setSettings={setSettings}
+                />
+            </div>
+        </motion.div>
+    );
+};
+
+const ICON_OPTIONS = [
+    { value: '', label: 'None', icon: <Ban size={18} className="text-gray-400" /> },
+    { value: 'Calendar', label: 'Calendar', icon: <Calendar size={18} /> },
+    { value: 'Scissors', label: 'Scissors', icon: <Scissors size={18} /> },
+    { value: 'MapPin', label: 'Location', icon: <MapPin size={18} /> },
+    { value: 'Phone', label: 'Phone', icon: <Phone size={18} /> },
+    { value: 'Star', label: 'Star', icon: <Star size={18} /> },
+    { value: 'Sparkles', label: 'Sparkles', icon: <Sparkles size={18} /> },
+    { value: 'Palette', label: 'Palette', icon: <Palette size={18} /> },
+    { value: 'Feather', label: 'Feather', icon: <Feather size={18} /> },
+    { value: 'Droplet', label: 'Water/Wash', icon: <Droplet size={18} /> },
+    { value: 'Wind', label: 'Blow Dry', icon: <Wind size={18} /> },
+    { value: 'Sun', label: 'Light', icon: <Sun size={18} /> },
+    { value: 'Moon', label: 'Dark', icon: <Moon size={18} /> },
+    { value: 'Zap', label: 'Energy', icon: <Zap size={18} /> },
+    { value: 'Heart', label: 'Heart', icon: <Heart size={18} /> },
+    { value: 'Smile', label: 'Smile', icon: <Smile size={18} /> },
+];
+
+const ServicesTab = ({ services, refresh, showMessage, settings, setSettings, theme }) => {
+    const [localServices, setLocalServices] = useState(services);
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [newService, setNewService] = useState({ title: '', description: '', icon_name: 'Calendar' });
+
+    useEffect(() => {
+        setLocalServices(services);
+    }, [services]);
+
+    const handleFieldChange = (idx, field, value) => {
+        const updated = [...localServices];
+        updated[idx] = { ...updated[idx], [field]: value };
+        setLocalServices(updated);
+    };
+
+    const handleSave = async (service) => {
+        try {
+            const { error } = await supabase.from('services_overview').upsert(service);
+            if (error) throw error;
+            showMessage('success', 'Service updated!');
+            refresh();
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleAdd = async () => {
+        if (!newService.title || !newService.description) {
+            showMessage('error', 'Please fill in both title and description');
+            return;
+        }
+        try {
+            const { error } = await supabase.from('services_overview').insert([newService]);
+            if (error) throw error;
+            setNewService({ title: '', description: '', icon_name: 'Calendar' });
+            setShowAddForm(false);
+            refresh();
+            showMessage('success', 'Service added!');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Delete this service?')) return;
+        try {
+            const { error } = await supabase.from('services_overview').delete().eq('id', id);
+            if (error) throw error;
+            showMessage('success', 'Service deleted!');
+            refresh();
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="services"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Services"
+                defaultHeadingName="Our Services"
+                description="Enable or disable the services section and customize its heading."
+                theme={theme}
+            />
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Service Highlights</h2>
+                <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all" style={{ backgroundColor: "var(--primary)" }}
+                >
+                    <Plus size={18} /> {showAddForm ? 'Cancel' : 'Add Service'}
+                </button>
+            </div>
+
+            {showAddForm && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-4 mb-6">
+                    <h3 className="font-semibold text-gray-900">New Service</h3>
+                    <div className="flex gap-4">
+                        <div className="flex-grow space-y-4">
+                            <input
+                                placeholder="Service Title"
+                                value={newService.title}
+                                onChange={(e) => setNewService({ ...newService, title: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                            <textarea
+                                placeholder="Description"
+                                value={newService.description}
+                                onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg h-32 resize-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            />
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-medium text-gray-700">Icon</label>
+                                <div className="relative">
+                                    <select
+                                        value={newService.icon_name}
+                                        onChange={(e) => setNewService({ ...newService, icon_name: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent appearance-none"
+                                    >
+                                        {ICON_OPTIONS.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-500">
+                                        {ICON_OPTIONS.find(opt => opt.value === newService.icon_name)?.icon || <Calendar size={18} />}
+                                    </div>
+                                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                                        <ChevronDown size={14} />
+                                    </div>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                    Select 'None' to hide icon
+                                </div>
+                            </div>
+                        </div>
+                        <div className="w-1/3 flex flex-col gap-2">
+                            <label className="text-sm font-medium text-gray-700">Service Image</label>
+                            {newService.image_url ? (
+                                <div className="flex flex-col gap-2 w-full">
+                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200">
+                                        <img src={newService.image_url} alt="Service Preview" className="w-full h-full object-cover" />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                            setNewService({ ...newService, image_url: null });
+                                        }}
+                                        className="w-full py-1.5 px-3 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 transition-colors text-xs font-medium flex items-center justify-center gap-1"
+                                    >
+                                        <Trash2 size={12} color="currentColor" /> Remove Image
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="w-full aspect-video rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center bg-gray-50">
+                                    <ImageUploader
+                                        onUpload={(url) => setNewService({ ...newService, image_url: url })}
+                                        folder="services"
+                                        showMessage={showMessage}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => handleAdd()}
+                        className="w-full bg-primary text-white font-medium py-3 rounded-lg hover:bg-opacity-90 transition-all flex items-center justify-center gap-2" style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        <Plus size={16} /> Create Service
+                    </button>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(localServices || []).map((s, idx) => (
+                    <div key={s.id || idx} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-4">
+                        <div className="flex items-start justify-between">
+                            <div className="relative mb-6">
+                                <div className="w-12 h-12 bg-secondary rounded-lg flex items-center justify-center text-primary border border-primary/10">
+                                    {ICON_OPTIONS.find(opt => opt.value === s.icon_name)?.icon || <Scissors size={24} />}
+                                </div>
+                                <select
+                                    value={s.icon_name || ''}
+                                    onChange={(e) => handleFieldChange(idx, 'icon_name', e.target.value)}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    title="Click to change icon"
+                                >
+                                    {ICON_OPTIONS.map(opt => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <div className="absolute -bottom-6 left-0 text-[10px] text-gray-400 whitespace-nowrap pointer-events-none w-32">
+                                    Click icon to edit
+                                </div>
+                            </div>
+                            {s.id && (
+                                <button
+                                    onClick={() => handleDelete(s.id)}
+                                    className="text-red-500 hover:text-red-700 transition-colors"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Image Upload for Existing Service */}
+                        <div className="w-full">
+                            {s.image_url ? (
+                                <div className="flex flex-col gap-2 w-full mb-2">
+                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-gray-200">
+                                        <img src={s.image_url} alt="Service" className="w-full h-full object-cover" />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                            if (window.confirm('Remove this image? (You must click Save Changes to persist)')) {
+                                                handleFieldChange(idx, 'image_url', null);
+                                            }
+                                        }}
+                                        className="w-full py-1.5 px-3 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 transition-colors text-xs font-medium flex items-center justify-center gap-1"
+                                    >
+                                        <Trash2 size={12} color="currentColor" /> Remove Image
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="mb-2">
+                                    <ImageUploader
+                                        onUpload={(url) => handleFieldChange(idx, 'image_url', url)}
+                                        folder="services"
+                                        showMessage={showMessage}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+
+                        <input
+                            placeholder="Service Title"
+                            value={s.title}
+                            onChange={(e) => handleFieldChange(idx, 'title', e.target.value)}
+                            className="w-full text-lg font-semibold border-none p-0 focus:ring-0 outline-none"
+                        />
+                        <textarea
+                            placeholder="Description"
+                            value={s.description || s.desc || ''}
+                            onChange={(e) => handleFieldChange(idx, 'description', e.target.value)}
+                            className="w-full text-gray-600 text-sm h-32 resize-none border-none p-0 focus:ring-0 outline-none"
+                        />
+                        <button
+                            onClick={() => handleSave(s)}
+                            className="w-full bg-primary text-white font-medium py-3 rounded-lg hover:bg-opacity-90 transition-all flex items-center justify-center gap-2" style={{ backgroundColor: "var(--primary)" }}
+                        >
+                            <Save size={16} /> Save Changes
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+const PricingTab = ({ pricing, categories, refresh, showMessage, settings, setSettings, theme }) => {
+    const [localPricing, setLocalPricing] = useState(pricing);
+    const [localCategories, setLocalCategories] = useState(categories);
+    const [newItem, setNewItem] = useState({ category: categories[0]?.name || '', item_name: '', price: '', duration_minutes: 60 });
+    const [isManagingCategories, setIsManagingCategories] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+
+    useEffect(() => { setLocalPricing(pricing); }, [pricing]);
+    useEffect(() => { setLocalCategories(categories); if (categories.length > 0 && !newItem.category) setNewItem(prev => ({ ...prev, category: categories[0].name })); }, [categories]);
+
+    const handleFieldChange = (idx, field, value) => {
+        const updated = [...localPricing];
+        updated[idx] = { ...updated[idx], [field]: value };
+        setLocalPricing(updated);
+    };
+
+    const saveSetting = async (key, value) => {
+        try {
+            const { error } = await supabase.from('site_settings').upsert({ key, value }, { onConflict: 'key' });
+            if (error) throw error;
+            setSettings(prev => ({ ...prev, [key]: value }));
+            showMessage('success', 'Setting updated');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleSaveItem = async (item) => {
+        try {
+            const { error } = await supabase.from('price_list').upsert(item);
+            if (error) throw error;
+            showMessage('success', 'Item updated');
+            refresh();
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleAdd = async () => {
+        if (!newItem.item_name || !newItem.price || !newItem.category) {
+            showMessage('error', 'Please fill in all fields (including category)');
+            return;
+        }
+        try {
+            const { error } = await supabase.from('price_list').insert([newItem]);
+            if (error) throw error;
+            setNewItem({ ...newItem, item_name: '', price: '' });
+            refresh();
+            showMessage('success', 'Added to price list');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to remove this item?')) return;
+        try {
+            await supabase.from('price_list').delete().eq('id', id);
+            refresh();
+            showMessage('success', 'Item removed');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleAddCategory = async () => {
+        if (!newCategoryName) return;
+        try {
+            const { error } = await supabase.from('price_categories').insert([{ name: newCategoryName, sort_order: localCategories.length * 10 }]);
+            if (error) throw error;
+            setNewCategoryName('');
+            refresh();
+            showMessage('success', 'Category added');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleDeleteCategory = async (cat) => {
+        if (!confirm(`Are you sure? This will NOT delete services in this category, but they will point to a missing category. Delete "${cat.name}"?`)) return;
+        try {
+            const { error } = await supabase.from('price_categories').delete().eq('id', cat.id);
+            if (error) throw error;
+            refresh();
+            showMessage('success', 'Category removed');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleUpdateCategory = async (cat, newName) => {
+        try {
+            const { error } = await supabase.from('price_categories').update({ name: newName }).eq('id', cat.id);
+            if (error) throw error;
+            refresh();
+            showMessage('success', 'Category updated');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="pricing"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Pricing"
+                defaultHeadingName="Price list"
+                description="Enable or disable the pricing list section and customize its heading."
+            />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-primary/10 shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-stone-600">Currency Symbol:</label>
+                        <input
+                            value={settings.pricing_currency_symbol || ''}
+                            onChange={(e) => saveSetting('pricing_currency_symbol', e.target.value)}
+                            placeholder="e.g. £"
+                            className="w-16 px-3 py-1.5 border border-stone-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"
+                        />
+                    </div>
+                    <p className="text-[10px] text-stone-500 italic max-w-[200px]">This will be prepended to all prices. Leave empty if you type symbols manually.</p>
+                </div>
+
+                <button
+                    onClick={() => setIsManagingCategories(!isManagingCategories)}
+                    className="px-6 py-2.5 bg-secondary text-primary border border-primary/20 rounded-xl hover:bg-primary hover:text-white transition-all text-sm font-medium flex items-center justify-center gap-2"
+                >
+                    <List size={18} />
+                    {isManagingCategories ? 'Close Category Manager' : 'Manage Service Categories'}
+                </button>
+            </div>
+
+            {isManagingCategories && (
+                <div className="bg-secondary rounded-xl border border-primary/20 p-6 mb-8">
+                    <h3 className="text-lg font-semibold text-stone-900 mb-4">Manage Service Categories</h3>
+
+                    <div className="flex gap-4 mb-6">
+                        <input
+                            placeholder="New Category Name"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            className="flex-grow px-4 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        />
+                        <button
+                            onClick={handleAddCategory}
+                            className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all flex items-center gap-2"
+                            style={{ backgroundColor: "var(--primary)" }}
+                        >
+                            <Plus size={18} /> Add Category
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {(localCategories || []).map((cat, idx) => (
+                            <div key={cat.id || idx} className="flex items-center justify-between p-3 bg-white border border-primary/20 rounded-lg">
+                                <input
+                                    value={cat.name}
+                                    onChange={(e) => {
+                                        const updated = [...localCategories];
+                                        updated[idx].name = e.target.value;
+                                        setLocalCategories(updated);
+                                    }}
+                                    onBlur={(e) => handleUpdateCategory(cat, e.target.value)}
+                                    className="font-medium text-primary border-none p-0 focus:ring-0 outline-none flex-grow"
+                                />
+                                <button
+                                    onClick={() => handleDeleteCategory(cat)}
+                                    className="text-red-500 hover:text-red-700 p-1"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm">
+                <h3 className="text-sm font-medium text-gray-700 mb-4 text-center">Add New Service Item</h3>
+                <div className="flex flex-wrap gap-4">
+                    <select
+                        value={newItem.category}
+                        onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    >
+                        {(localCategories || []).map(cat => (
+                            <option key={cat.id} value={cat.name}>{cat.name}</option>
+                        ))}
+                    </select>
+                    <input
+                        placeholder="Service Name (e.g. Balayage)"
+                        value={newItem.item_name}
+                        onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })}
+                        className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                    <input
+                        placeholder="Price (e.g. 100 or From 100)"
+                        value={newItem.price}
+                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                        className="w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                    <select
+                        value={newItem.duration_minutes}
+                        onChange={(e) => setNewItem({ ...newItem, duration_minutes: parseInt(e.target.value) })}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    >
+                        <option value={30}>30 min</option>
+                        <option value={60}>1 hour</option>
+                        <option value={90}>1.5h</option>
+                        <option value={120}>2h</option>
+                        <option value={150}>2.5h</option>
+                        <option value={180}>3h</option>
+                        <option value={210}>3.5h</option>
+                        <option value={240}>4h</option>
+                    </select>
+                    <button
+                        onClick={handleAdd}
+                        className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all flex items-center gap-2" style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        <Plus size={18} /> Add Item
+                    </button>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                {(localPricing || []).map((item, idx) => (
+                    <div key={item.id || idx} className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col md:flex-row md:items-center justify-between shadow-sm hover:shadow-md transition-shadow gap-4">
+                        <div className="flex-grow flex flex-col md:flex-row md:items-center gap-4">
+                            <div className="min-w-[120px]">
+                                <select
+                                    value={item.category}
+                                    onChange={(e) => handleFieldChange(idx, 'category', e.target.value)}
+                                    className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1 border-none bg-transparent p-0 focus:ring-0 outline-none cursor-pointer"
+                                >
+                                    {(localCategories || []).map(cat => (
+                                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    value={item.item_name}
+                                    onChange={(e) => handleFieldChange(idx, 'item_name', e.target.value)}
+                                    className="text-gray-900 font-medium border-none p-0 focus:ring-0 outline-none w-full"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    value={item.price}
+                                    onChange={(e) => handleFieldChange(idx, 'price', e.target.value)}
+                                    placeholder="Price"
+                                    className="text-primary font-semibold border-none p-0 focus:ring-0 outline-none min-w-[100px] w-auto"
+                                />
+                                <select
+                                    value={item.duration_minutes || 60}
+                                    onChange={(e) => handleFieldChange(idx, 'duration_minutes', parseInt(e.target.value))}
+                                    className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-stone-400 outline-none"
+                                >
+                                    <option value={30}>30m</option>
+                                    <option value={60}>1h</option>
+                                    <option value={90}>1.5h</option>
+                                    <option value={120}>2h</option>
+                                    <option value={150}>2.5h</option>
+                                    <option value={180}>3h</option>
+                                    <option value={210}>3.5h</option>
+                                    <option value={240}>4h</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => handleSaveItem(item)}
+                                className="text-primary/80 hover:text-stone-900 transition-colors p-2"
+                                title="Save"
+                            >
+                                <Save size={18} />
+                            </button>
+                            <button
+                                onClick={() => handleDelete(item.id)}
+                                className="text-gray-400 hover:text-red-600 transition-colors p-2"
+                                title="Delete"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+const ServiceSelectionModal = ({ isOpen, onClose, onSave, initialSelection = [], pricing = [], categories = [] }) => {
+    const [selected, setSelected] = useState(initialSelection);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    useEffect(() => {
+        setSelected(initialSelection);
+    }, [initialSelection, isOpen]);
+
+    if (!isOpen) return null;
+
+    const allServiceNames = (pricing || []).map(s => s.item_name);
+    const isAllSelected = allServiceNames.length > 0 && allServiceNames.every(name => selected.includes(name));
+
+    const toggleAll = () => {
+        if (isAllSelected) {
+            setSelected([]);
+        } else {
+            setSelected(allServiceNames);
+        }
+    };
+
+    const toggleCategory = (catName) => {
+        const catServices = pricing.filter(s => s.category === catName).map(s => s.item_name);
+        const isCatSelected = catServices.every(name => selected.includes(name));
+
+        if (isCatSelected) {
+            setSelected(prev => prev.filter(name => !catServices.includes(name)));
+        } else {
+            setSelected(prev => [...new Set([...prev, ...catServices])]);
+        }
+    };
+
+    const toggleService = (name) => {
+        setSelected(prev =>
+            prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+        );
+    };
+
+    const filteredPricing = pricing.filter(s =>
+        s.item_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+            >
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900">Manage Provided Services</h3>
+                        <p className="text-sm text-gray-500">Select the services this professional can perform</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6 bg-gray-50 border-b border-gray-100 flex flex-wrap gap-4 items-center justify-between">
+                    <div className="relative flex-grow max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                            type="text"
+                            placeholder="Search services..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
+                        />
+                    </div>
+                    <button
+                        onClick={toggleAll}
+                        className="px-4 py-2 text-sm font-medium text-primary hover:bg-white rounded-lg border border-transparent hover:border-gray-200 transition-all font-bold"
+                    >
+                        {isAllSelected ? 'Deselect All' : 'Select All'}
+                    </button>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-6 space-y-8">
+                    {categories.map(cat => {
+                        const catServices = filteredPricing.filter(s => s.category === cat.name);
+                        if (catServices.length === 0) return null;
+
+                        const isCatSelected = catServices.every(s => selected.includes(s.item_name));
+
+                        return (
+                            <div key={cat.id || cat.name} className="space-y-3">
+                                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                    <h4 className="font-bold text-primary uppercase tracking-wider text-xs">{cat.name}</h4>
+                                    <button
+                                        onClick={() => toggleCategory(cat.name)}
+                                        className="text-xs font-bold text-primary/80 hover:text-stone-900 underline"
+                                    >
+                                        {isCatSelected ? 'Deselect Category' : 'Select Category'}
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    {catServices.map(service => (
+                                        <label
+                                            key={service.id}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${selected.includes(service.item_name)
+                                                ? 'bg-secondary border-primary ring-1 ring-primary'
+                                                : 'bg-white border-gray-100 hover:border-gray-300'
+                                                }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selected.includes(service.item_name)}
+                                                onChange={() => toggleService(service.item_name)}
+                                                className="rounded border-gray-300 text-primary focus:ring-stone-500"
+                                            />
+                                            <div className="flex-grow">
+                                                <div className="text-sm font-medium text-gray-900">{service.item_name}</div>
+                                                <div className="text-xs text-gray-500">{service.duration_minutes} min • {service.price}</div>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => { onSave(selected); onClose(); }}
+                        className="flex-1 px-4 py-3 bg-primary text-white rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-lg shadow-stone-200"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        Save Selections
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+const TeamTab = ({ stylists = [], services = [], pricing = [], priceCategories = [], settings, setSettings, refresh, showMessage, theme }) => {
+    const [localStylists, setLocalStylists] = useState(stylists);
+    const [showHelp, setShowHelp] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
+    const [newStylist, setNewStylist] = useState({ stylist_name: '', role: '', description: '', calendar_id: '', image_url: '', hover_video_url: '', sort_order: 0, provided_services: [] });
+    const [serviceModal, setServiceModal] = useState({ isOpen: false, context: null, initialSelection: [] });
+    const [assigningServices, setAssigningServices] = useState(null);
+
+    useEffect(() => { setLocalStylists(stylists); }, [stylists]);
+
+    const handleFieldChange = (idx, field, value) => {
+        const updated = [...localStylists];
+        updated[idx] = { ...updated[idx], [field]: value };
+        setLocalStylists(updated);
+    };
+
+    const handleSave = async (s) => {
+        try {
+            const { error } = await supabase.from('stylist_calendars').upsert(s);
+            if (error) throw error;
+            showMessage('success', `Professional ${s.stylist_name} updated!`);
+            refresh();
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleAdd = async () => {
+        if (!newStylist.stylist_name) return showMessage('error', 'Professional name is required');
+        try {
+            const { error } = await supabase.from('stylist_calendars').insert([newStylist]);
+            if (error) throw error;
+            setNewStylist({ stylist_name: '', role: '', description: '', calendar_id: '', image_url: '', hover_video_url: '', sort_order: 0, provided_services: [] });
+            setIsAdding(false);
+            refresh();
+            showMessage('success', 'New staff member added!');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this professional?')) return;
+        try {
+            const { error } = await supabase.from('stylist_calendars').delete().eq('id', id);
+            if (error) throw error;
+            refresh();
+            showMessage('success', 'Professional removed');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleSaveOrder = async () => {
+        try {
+            const updates = (localStylists || []).map((s, index) => ({
+                ...s,
+                sort_order: index
+            }));
+
+            // Optimistic update
+            setLocalStylists(updates);
+
+            const { error } = await supabase.from('stylist_calendars').upsert(updates);
+            if (error) throw error;
+
+            showMessage('success', 'Team order saved!');
+            refresh();
+        } catch (err) {
+            console.error(err);
+            showMessage('error', 'Failed to save order');
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="team"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Team"
+                defaultHeadingName="Meet the Dream Team"
+                description="Enable or disable the team section and customize its heading."
+                theme={theme}
+            />
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-2xl font-semibold text-gray-900">Team Members</h2>
+                    <button
+                        onClick={() => setShowHelp(!showHelp)}
+                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                        title="Calendar Setup Help"
+                    >
+                        <Info size={20} />
+                    </button>
+                </div>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleSaveOrder}
+                        className="flex items-center gap-2 px-4 py-2 bg-secondary text-primary/90 rounded-lg hover:bg-stone-200 transition-all border border-primary/20"
+                    >
+                        <Save size={18} /> Save Order
+                    </button>
+                    <button
+                        onClick={() => setIsAdding(!isAdding)}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all font-medium" style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        <Plus size={18} /> Add Professional
+                    </button>
+                </div>
+            </div>
+
+            {/* Stylist Service Assignment Modal */}
+            <StylistServiceModal
+                isOpen={assigningServices !== null}
+                onClose={() => setAssigningServices(null)}
+                stylist={assigningServices}
+                pricing={pricing}
+                showMessage={showMessage}
+            />
+
+            {showHelp && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-6">
+                    <h3 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                        <Info size={18} />
+                        How to Set Up Google Calendar for a Professional
+                    </h3>
+                    <div className="text-sm text-amber-900 space-y-3">
+                        <div>
+                            <p className="font-medium mb-1">1. Create or Access the Professional's Google Calendar</p>
+                            <p className="text-amber-800 ml-4">Go to <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" className="underline">calendar.google.com</a> and create a new calendar for the stylist or use an existing one.</p>
+                        </div>
+                        <div>
+                            <p className="font-medium mb-1">2. Share the Calendar</p>
+                            <ul className="text-amber-800 ml-4 list-disc list-inside space-y-1">
+                                <li>Click the three dots next to the calendar name</li>
+                                <li>Select "Settings and sharing"</li>
+                                <li>Scroll to "Share with specific people"</li>
+                                <li>Add your service account email with <strong>"Make changes to events"</strong> permission</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <p className="font-medium mb-1">3. Get the Calendar ID</p>
+                            <ul className="text-amber-800 ml-4 list-disc list-inside space-y-1">
+                                <li>In Calendar Settings, scroll to "Integrate calendar"</li>
+                                <li>Copy the <strong>Calendar ID</strong> (looks like: example@group.calendar.google.com)</li>
+                                <li>Paste it into the "Calendar ID" field below</li>
+                            </ul>
+                        </div>
+                        <div className="bg-amber-100 p-3 rounded mt-3">
+                            <p className="font-medium text-amber-900">Required Permissions:</p>
+                            <p className="text-amber-800 text-xs mt-1">The service account needs "Make changes to events" permission to create and manage bookings.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isAdding && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 shadow-sm space-y-4">
+                    <h3 className="text-sm font-medium text-gray-700">New Professional</h3>
+                    <div className="flex items-start gap-4">
+                        <div className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 shrink-0">
+                            {newStylist.image_url ? (
+                                <img src={newStylist.image_url} className="w-full h-full object-cover" alt="Preview" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                    <Image size={32} />
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <ImageUploader
+                                folder="team"
+                                onUpload={(url) => setNewStylist({ ...newStylist, image_url: url })}
+                                showMessage={showMessage}
+                            />
+                            <VideoUploader
+                                folder="team_videos"
+                                onUpload={(url) => setNewStylist({ ...newStylist, hover_video_url: url })}
+                                showMessage={showMessage}
+                            />
+                            {newStylist.hover_video_url && (
+                                <span className="text-[10px] text-green-600 font-medium">✓ Video selected</span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input value={newStylist.stylist_name} onChange={e => setNewStylist({ ...newStylist, stylist_name: e.target.value })} placeholder="Name" className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none" />
+                        <input value={newStylist.role} onChange={e => setNewStylist({ ...newStylist, role: e.target.value })} placeholder="Role" className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none" />
+                        <input type="number" value={newStylist.sort_order} onChange={e => setNewStylist({ ...newStylist, sort_order: parseInt(e.target.value) || 0 })} placeholder="Order" className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none" />
+                    </div>
+                    <input
+                        value={newStylist.calendar_id}
+                        onChange={e => setNewStylist({ ...newStylist, calendar_id: e.target.value })}
+                        placeholder="Google Calendar ID (e.g., example@group.calendar.google.com)"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none text-sm"
+                    />
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Service Assignment:</label>
+                        <button
+                            onClick={() => setServiceModal({
+                                isOpen: true,
+                                context: 'new',
+                                initialSelection: newStylist.provided_services || []
+                            })}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-white hover:border-stone-400 transition-all text-sm group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <Scissors size={18} className="text-primary/80" />
+                                <span className="text-primary">
+                                    {newStylist.provided_services?.length || 0} services assigned
+                                </span>
+                            </div>
+                            <Edit size={16} className="text-gray-400 group-hover:text-primary" />
+                        </button>
+                    </div>
+                    <textarea
+                        value={newStylist.description}
+                        onChange={e => setNewStylist({ ...newStylist, description: e.target.value })}
+                        placeholder="Bio"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg h-20 resize-none focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                    />
+                    <div className="flex gap-4">
+                        <button onClick={handleAdd} className="flex-grow bg-primary text-white py-2 rounded-lg hover:bg-opacity-90 transition-all" style={{ backgroundColor: "var(--primary)" }}>Create Professional</button>
+                        <button onClick={() => setIsAdding(false)} className="px-8 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all">Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            <Reorder.Group axis="y" values={localStylists} onReorder={setLocalStylists} className="space-y-4">
+                {(localStylists || []).map((s, idx) => (
+                    <Reorder.Item key={s.id || idx} value={s} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm space-y-4 touch-none relative">
+                        <div className="absolute top-4 right-4 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
+                            <GripVertical size={20} />
+                        </div>
+                        <div className="flex items-start gap-6">
+                            <div className="flex flex-col gap-3 shrink-0">
+                                <div className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative group">
+                                    <img src={s.image_url || '/placeholder.png'} className="w-full h-full object-cover" alt={s.stylist_name} />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <ImageUploader
+                                        folder="team"
+                                        onUpload={(url) => {
+                                            handleFieldChange(idx, 'image_url', url);
+                                            handleSave({ ...s, image_url: url });
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                    <VideoUploader
+                                        folder="team_videos"
+                                        onUpload={(url) => {
+                                            handleFieldChange(idx, 'hover_video_url', url);
+                                            handleSave({ ...s, hover_video_url: url });
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                    {s.hover_video_url && (
+                                        <span className="text-[10px] text-green-600 font-medium">✓ Hover video active</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex-grow space-y-2 pr-8">
+                                <input value={s.stylist_name} onChange={(e) => handleFieldChange(idx, 'stylist_name', e.target.value)} className="w-full text-lg font-semibold border-none p-0 focus:ring-0 outline-none" />
+                                <input value={s.role || ''} placeholder="Role" onChange={(e) => handleFieldChange(idx, 'role', e.target.value)} className="w-full text-sm text-gray-600 border-none p-0 focus:ring-0 outline-none" />
+                                <div className="flex items-center gap-2 mt-2 bg-secondary p-2 rounded-lg border border-stone-100">
+                                    <span className="text-sm font-medium text-primary/80">Display Order:</span>
+                                    <span className="text-sm font-bold text-primary">{idx}</span>
+                                    <span className="text-xs text-gray-400 ml-auto">(Drag to reorder)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <input
+                            value={s.calendar_id || ''}
+                            onChange={(e) => handleFieldChange(idx, 'calendar_id', e.target.value)}
+                            placeholder="Google Calendar ID (e.g., example@group.calendar.google.com)"
+                            className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-mono text-gray-700"
+                        />
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">Service Assignment:</label>
+                            <button
+                                onClick={() => setServiceModal({
+                                    isOpen: true,
+                                    context: idx,
+                                    initialSelection: s.provided_services || []
+                                })}
+                                className="w-full flex items-center justify-between px-4 py-3 bg-secondary border border-primary/20 rounded-lg hover:bg-white hover:border-stone-400 transition-all text-sm group"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Scissors size={18} className="text-primary/80" />
+                                    <span className="text-primary font-medium">
+                                        {s.provided_services?.length || 0} services assigned
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-stone-400 group-hover:text-primary/80">Click to manage</span>
+                                    <Edit size={16} className="text-gray-400 group-hover:text-primary" />
+                                </div>
+                            </button>
+                        </div>
+                        <textarea value={s.description || ''} onChange={(e) => handleFieldChange(idx, 'description', e.target.value)} placeholder="Bio" className="w-full text-sm text-gray-600 h-20 resize-none border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" />
+                        <div className="flex gap-2">
+                            <button onClick={() => handleSave(s)} className="flex-grow bg-primary text-white py-2 rounded-lg hover:bg-opacity-90 transition-all font-medium" style={{ backgroundColor: "var(--primary)" }}>Save Details</button>
+                            <button onClick={() => handleDelete(s.id)} className="px-4 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all font-medium">Delete</button>
+                        </div>
+                    </Reorder.Item>
+                ))}
+            </Reorder.Group>
+
+            <ServiceSelectionModal
+                isOpen={serviceModal.isOpen}
+                onClose={() => setServiceModal(prev => ({ ...prev, isOpen: false }))}
+                initialSelection={serviceModal.initialSelection}
+                pricing={pricing}
+                categories={priceCategories}
+                onSave={async (selected) => {
+                    if (serviceModal.context === 'new') {
+                        setNewStylist(prev => ({ ...prev, provided_services: selected }));
+                    } else {
+                        const idx = serviceModal.context;
+                        const stylistToUpdate = localStylists[idx];
+                        if (!stylistToUpdate) return;
+
+                        // Optimistic update
+                        handleFieldChange(idx, 'provided_services', selected);
+
+                        try {
+                            const { error } = await supabase.from('stylist_calendars').upsert({
+                                ...stylistToUpdate,
+                                provided_services: selected
+                            });
+                            if (error) throw error;
+                            showMessage('success', `Services for ${stylistToUpdate.stylist_name} saved!`);
+                            refresh();
+                        } catch (err) {
+                            showMessage('error', 'Failed to save services: ' + err.message);
+                        }
+                    }
+                }}
+            />
+        </motion.div>
+    );
+};
+
+const StylistServiceModal = ({ isOpen, onClose, stylist, pricing, showMessage }) => {
+    const [assignedIds, setAssignedIds] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && stylist) {
+            fetchAssignedServices();
+        }
+    }, [isOpen, stylist]);
+
+    const fetchAssignedServices = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('stylist_services')
+            .select('service_id')
+            .eq('stylist_id', stylist.id);
+
+        if (error) {
+            showMessage('error', 'Error fetching assigned services');
+        } else {
+            setAssignedIds(data.map(d => d.service_id));
+        }
+        setLoading(false);
+    };
+
+    const toggleService = async (serviceId) => {
+        try {
+            if (assignedIds.includes(serviceId)) {
+                await supabase
+                    .from('stylist_services')
+                    .delete()
+                    .eq('stylist_id', stylist.id)
+                    .eq('service_id', serviceId);
+                setAssignedIds(prev => prev.filter(id => id !== serviceId));
+            } else {
+                await supabase
+                    .from('stylist_services')
+                    .insert({ stylist_id: stylist.id, service_id: serviceId });
+                setAssignedIds(prev => [...prev, serviceId]);
+            }
+        } catch (err) {
+            showMessage('error', 'Update failed');
+        }
+    };
+
+    const handleSelectAll = async () => {
+        try {
+            setLoading(true);
+            // 1. Delete all existing for this stylist
+            await supabase.from('stylist_services').delete().eq('stylist_id', stylist.id);
+
+            // 2. Insert all service IDs
+            const allIds = pricing.map(p => p.id);
+            const inserts = allIds.map(id => ({ stylist_id: stylist.id, service_id: id }));
+
+            const { error } = await supabase.from('stylist_services').insert(inserts);
+            if (error) throw error;
+
+            setAssignedIds(allIds);
+            showMessage('success', 'All services assigned');
+        } catch (err) {
+            showMessage('error', 'Bulk assignment failed: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleClearAll = async () => {
+        try {
+            setLoading(true);
+            const { error } = await supabase.from('stylist_services').delete().eq('stylist_id', stylist.id);
+            if (error) throw error;
+            setAssignedIds([]);
+            showMessage('success', 'All services removed');
+        } catch (err) {
+            showMessage('error', 'Bulk removal failed: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+            >
+                <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-secondary">
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900">Assign Services</h3>
+                        <p className="text-sm text-gray-500">Managing services for <span className="font-semibold text-primary">{stylist.stylist_name}</span></p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleSelectAll}
+                            disabled={loading}
+                            className="text-xs font-bold text-primary/80 hover:text-stone-900 px-3 py-1.5 rounded-lg border border-primary/20 hover:bg-secondary transition-all uppercase tracking-wider"
+                        >
+                            Select All
+                        </button>
+                        <button
+                            onClick={handleClearAll}
+                            disabled={loading}
+                            className="text-xs font-bold text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-all uppercase tracking-wider"
+                        >
+                            Clear All
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors ml-2">
+                            <X size={24} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-6">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="animate-spin text-primary/80" size={32} />
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {pricing.map(service => (
+                                <button
+                                    key={service.id}
+                                    onClick={() => toggleService(service.id)}
+                                    className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left ${assignedIds.includes(service.id)
+                                        ? 'border-primary bg-secondary'
+                                        : 'border-gray-100 bg-white hover:border-gray-300'
+                                        }`}
+                                >
+                                    <div>
+                                        <div className="font-semibold text-gray-900">{service.item_name}</div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wider">{service.category}</div>
+                                    </div>
+                                    {assignedIds.includes(service.id) && (
+                                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white">
+                                            <Check size={14} strokeWidth={3} />
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-2.5 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover transition-all shadow-lg"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        Done
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+const GalleryTab = ({ gallery, refresh, showMessage, settings, setSettings, theme }) => {
+    const handleDelete = async (id) => {
+        if (!confirm('Remove this image?')) return;
+        try {
+            const { error } = await supabase.from('gallery_images').delete().eq('id', id);
+            if (error) throw error;
+            refresh();
+            showMessage('success', 'Image removed');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    const handleAdd = async (url) => {
+        try {
+            const { error } = await supabase.from('gallery_images').insert([{ image_url: url, sort_order: gallery.length }]);
+            if (error) throw error;
+            refresh();
+            showMessage('success', 'Image added to gallery');
+        } catch (err) { showMessage('error', err.message); }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="gallery"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Gallery"
+                defaultHeadingName="Our Gallery"
+                description="Enable or disable the gallery section and customize its heading."
+                theme={theme}
+            />
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Gallery</h2>
+                <ImageUploader folder="gallery" onUpload={handleAdd} showMessage={showMessage} />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {(gallery || []).map((img) => (
+                    <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+                        <img src={img.image_url} className="w-full h-full object-cover" alt="Gallery" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-colors" />
+                    </div>
+                ))}
+            </div>
+        </motion.div>
+    );
+};
+
+const AppointmentsTab = ({ appointments, setAppointments, showMessage, clients, setClients, services, stylists, pricing, openingHours, defaultView = 'list', settings, setSettings, theme }) => {
+    const [loading, setLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(false); // Loading state for saving appointments
+    const [editingAppt, setEditingAppt] = useState(null);
+    const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', service: '', date: '', time: '', stylist: '' });
+    const [filterStylist, setFilterStylist] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Initialize view modes based on defaultView prop
+    const initialViewMode = defaultView === 'list' ? 'list' : 'calendar';
+    const initialCalendarViewMode = ['day', 'week', 'month'].includes(defaultView) ? defaultView : 'week';
+
+    const [viewMode, setViewMode] = useState(initialViewMode); // 'list' or 'calendar'
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [clientSearch, setClientSearch] = useState(''); // Client search state
+    const [newAppt, setNewAppt] = useState({ client_id: '', stylist: '', service: '', date: '', time: '', send_email: true });
+
+    useEffect(() => {
+        if (editingAppt) {
+            setEditForm({
+                name: editingAppt.customer?.name || '',
+                email: editingAppt.customer?.email || '',
+                phone: editingAppt.customer?.phone || '',
+                service: editingAppt.service || '',
+                stylist: editingAppt.stylist || '',
+                date: editingAppt.startTime ? new Date(editingAppt.startTime).toLocaleDateString('en-CA') : '',
+                time: editingAppt.startTime ? new Date(editingAppt.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''
+            });
+        }
+    }, [editingAppt]);
+
+    // Filter clients for search
+    const filteredClientsSearch = clientSearch
+        ? clients?.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.email.toLowerCase().includes(clientSearch.toLowerCase()))
+        : [];
+
+    const handleSlotClick = (date, hour) => {
+        const dateStr = date.toLocaleDateString('en-CA');
+        const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+        setNewAppt(prev => ({
+            ...prev,
+            date: dateStr,
+            time: timeStr,
+            stylist: filterStylist !== 'all' ? filterStylist : ''
+        }));
+        setIsAddModalOpen(true);
+    };
+
+    const [timeSlots, setTimeSlots] = useState([]);
+    const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
+    // Check if salon is closed on the selected date
+    const isClosed = React.useMemo(() => {
+        if (!newAppt.date || !openingHours || openingHours === '') return false;
+        const selectedDate = new Date(newAppt.date);
+        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][selectedDate.getDay()];
+        const parsedHours = parseOpeningHours(openingHours);
+        const slots = parsedHours[dayName];
+        return !slots || !slots.some(s => s); // Closed if no slots or all slots are null
+    }, [newAppt.date, openingHours]);
+
+    useEffect(() => {
+        const dateToFetch = editingAppt ? editForm.date : newAppt.date;
+        const stylistToFetch = editingAppt ? editForm.stylist : newAppt.stylist;
+
+        if (dateToFetch) {
+            const fetchAvailability = async () => {
+                setIsLoadingSlots(true);
+                try {
+                    const stylistParam = stylistToFetch ? `&professional=${encodeURIComponent(stylistToFetch)}` : ''; // API expects 'professional'
+                    const res = await fetch(`/api/availability?date=${dateToFetch}${stylistParam}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        // If editing, include the current appointment's time slot as available
+                        const rawSlots = data.slots || [];
+                        let slots = rawSlots.map(s => {
+                            if (typeof s === 'string') return s;
+                            if (s && typeof s.time === 'string') return s.time;
+                            return null;
+                        }).filter(Boolean);
+                        if (editingAppt && editForm.date === new Date(editingAppt.startTime).toLocaleDateString('en-CA')) {
+                            const currentSlot = new Date(editingAppt.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                            if (!slots.includes(currentSlot)) {
+                                slots.push(currentSlot);
+                                slots.sort();
+                            }
+                        }
+                        setTimeSlots(slots);
+                    } else {
+                        setTimeSlots([]);
+                    }
+                } catch (err) {
+                    console.error('Error fetching availability:', err);
+                    setTimeSlots([]);
+                } finally {
+                    setIsLoadingSlots(false);
+                }
+            };
+            fetchAvailability();
+        } else {
+            setTimeSlots([]);
+        }
+    }, [newAppt.date, newAppt.stylist, editForm.date, editingAppt]);
+
+    useEffect(() => {
+        fetchAppointments();
+    }, []);
+
+    // Hybrid appointments: Use Supabase locally, API in production
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    const fetchAppointments = async () => {
+        setLoading(true);
+        try {
+            if (isLocalDev) {
+                // Local: Fetch from Supabase
+                const { data, error } = await supabase
+                    .from('appointments')
+                    .select(`
+                        id,
+                        start_time,
+                        end_time,
+                        stylist,
+                        service,
+                        status,
+                        notes,
+                        clients (
+                            id,
+                            name,
+                            email,
+                            phone
+                        )
+                    `);
+
+                if (error) throw error;
+
+                const mappedAppointments = data.map(appt => ({
+                    id: appt.id,
+                    stylist: appt.stylist,
+                    startTime: appt.start_time,
+                    endTime: appt.end_time,
+                    service: appt.service,
+                    client_id: appt.clients?.id,
+                    customer: {
+                        name: appt.clients?.name || 'Unknown',
+                        email: appt.clients?.email || '',
+                        phone: appt.clients?.phone || '',
+                        service: appt.service
+                    }
+                }));
+
+                setAppointments(mappedAppointments);
+            } else {
+                // Production: Fetch from Google Calendar API
+                const response = await fetch('/api/appointments/list');
+                const data = await response.json();
+                if (data.appointments) {
+                    setAppointments(data.appointments);
+                }
+            }
+        } catch (err) {
+            console.error('Fetch error:', err);
+            showMessage('error', 'Failed to load appointments');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const [isAddingNewClient, setIsAddingNewClient] = useState(false);
+    const [newClientData, setNewClientData] = useState({ name: '', email: '', phone: '' });
+
+    const handleQuickAddClient = async () => {
+        if (!newClientData.name) return showMessage('error', 'Name is required');
+
+        try {
+            let clientToSelect;
+
+            // Check if client with this email already exists (only if email provided)
+            if (newClientData.email?.trim()) {
+                const { data: existingClient, error: searchError } = await supabase
+                    .from('clients')
+                    .select('*')
+                    .eq('email', newClientData.email.trim())
+                    .maybeSingle();
+
+                if (searchError) throw searchError;
+
+                if (existingClient) {
+                    clientToSelect = existingClient;
+                    showMessage('info', 'Existing client found and selected');
+                }
+            }
+
+            if (!clientToSelect) {
+                // Create new one
+                const { data: newClient, error: insertError } = await supabase
+                    .from('clients')
+                    .insert([{
+                        name: newClientData.name.trim(),
+                        email: newClientData.email?.trim()?.toLowerCase() || null,
+                        phone: newClientData.phone?.trim() || null
+                    }])
+                    .select()
+                    .single();
+
+                if (insertError) throw insertError;
+                clientToSelect = newClient;
+                setClients(prev => [newClient, ...prev]); // Update local state
+                showMessage('success', 'Client created and selected!');
+            }
+
+            setNewAppt({ ...newAppt, client_id: clientToSelect.id }); // Auto-select client
+            setClientSearch('');
+            setIsAddingNewClient(false);
+            setNewClientData({ name: '', email: '', phone: '' });
+        } catch (err) {
+            console.error('Error adding client:', err);
+            showMessage('error', err.message || 'Failed to add client');
+        }
+    };
+
+    const handleAddAppointment = async (e) => {
+        e.preventDefault();
+        const client = clients.find(c => c.id === newAppt.client_id);
+        if (!client) return showMessage('error', 'Select a client first');
+
+        // Get duration from selected service in pricing list
+        const selectedPriceItem = pricing?.find(p => p.item_name === newAppt.service);
+        const duration = selectedPriceItem?.duration_minutes || 60;
+
+        const startDateTime = new Date(`${newAppt.date}T${newAppt.time}:00`).toISOString();
+        const endDateTime = new Date(new Date(`${newAppt.date}T${newAppt.time}:00`).getTime() + duration * 60 * 1000).toISOString();
+
+        setIsSaving(true); // Start loading
+        try {
+            if (isLocalDev) {
+                // Local: Save to Supabase
+                const { error } = await supabase
+                    .from('appointments')
+                    .insert({
+                        client_id: client.id,
+                        stylist: newAppt.stylist,
+                        service: newAppt.service,
+                        start_time: startDateTime,
+                        end_time: endDateTime,
+                        status: 'confirmed'
+                    });
+
+                if (error) throw error;
+
+                showMessage('success', 'Appointment created!');
+                setIsAddModalOpen(false);
+                fetchAppointments();
+                setNewAppt({ client_id: '', stylist: '', service: '', date: '', time: '', send_email: true });
+                setClientSearch('');
+            } else {
+                // Production: Use Google Calendar API
+                const res = await fetch('/api/book', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        stylist: newAppt.stylist,
+                        service: newAppt.service,
+                        date: newAppt.date,
+                        time: newAppt.time,
+                        name: client.name,
+                        email: client.email,
+                        phone: client.phone,
+                        duration_minutes: duration,
+                        send_email: newAppt.send_email
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showMessage('success', 'Appointment created!');
+                    setIsAddModalOpen(false);
+                    fetchAppointments();
+                    setNewAppt({ client_id: '', stylist: '', service: '', date: '', time: '', send_email: true });
+                    setClientSearch('');
+                } else {
+                    showMessage('error', data.error || 'Failed to create');
+                }
+            }
+        } catch (err) {
+            console.error('Add appt error:', err);
+            showMessage('error', err.message || 'API Error');
+        } finally {
+            setIsSaving(false); // Stop loading
+        }
+    };
+
+    const handleDelete = async (appt) => {
+        if (!confirm(`Delete appointment for ${appt.customer.name}?`)) return;
+
+        try {
+            if (isLocalDev) {
+                // Local: Delete from Supabase
+                const { error } = await supabase
+                    .from('appointments')
+                    .delete()
+                    .eq('id', appt.id);
+
+                if (error) throw error;
+
+                showMessage('success', 'Appointment deleted');
+                setEditingAppt(null);
+                fetchAppointments();
+            } else {
+                // Production: Delete from Google Calendar
+                const response = await fetch('/api/appointments/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ eventId: appt.id, calendarId: appt.calendarId })
+                });
+
+                if (response.ok) {
+                    showMessage('success', 'Appointment deleted');
+                    setEditingAppt(null);
+                    fetchAppointments();
+                } else {
+                    throw new Error('Delete failed');
+                }
+            }
+        } catch (err) {
+            showMessage('error', 'Failed to delete appointment');
+        }
+    };
+
+    // ... existing handleUpdate ...
+    const handleUpdate = async (e) => {
+        if (e) e.preventDefault();
+        setIsSaving(true);
+        try {
+            // Calculate start and end times
+            const selectedPriceItem = pricing?.find(p => p.item_name === editForm.service);
+            const duration = selectedPriceItem?.duration_minutes || 60;
+            const startDateTime = new Date(`${editForm.date}T${editForm.time}:00`).toISOString();
+            const endDateTime = new Date(new Date(`${editForm.date}T${editForm.time}:00`).getTime() + duration * 60 * 1000).toISOString();
+
+            if (isLocalDev) {
+                // Update local Supabase
+                const { error: apptError } = await supabase
+                    .from('appointments')
+                    .update({
+                        service: editForm.service,
+                        stylist: editForm.stylist,
+                        start_time: startDateTime,
+                        end_time: endDateTime
+                    })
+                    .eq('id', editingAppt.id);
+
+                if (apptError) throw apptError;
+
+                // Update client info if available
+                if (editingAppt.client_id) {
+                    const { error: clientError } = await supabase
+                        .from('clients')
+                        .update({
+                            name: editForm.name,
+                            email: editForm.email,
+                            phone: editForm.phone
+                        })
+                        .eq('id', editingAppt.client_id);
+
+                    if (clientError) throw clientError;
+                }
+            } else {
+                if (editForm.stylist !== editingAppt.stylist) {
+                    // Stylist changed -> Delete from old calendar and create in new one
+                    const delRes = await fetch('/api/appointments/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ eventId: editingAppt.id, calendarId: editingAppt.calendarId })
+                    });
+
+                    if (!delRes.ok) throw new Error('Failed to remove old appointment when switching professional');
+
+                    const res = await fetch('/api/book', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            stylist: editForm.stylist,
+                            service: editForm.service,
+                            date: editForm.date,
+                            time: editForm.time,
+                            name: editForm.name,
+                            email: editForm.email,
+                            phone: editForm.phone,
+                            duration_minutes: duration,
+                            send_email: false
+                        })
+                    });
+
+                    if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.error || 'Failed to create new appointment for the new professional');
+                    }
+
+                    showMessage('success', 'Appointment moved to new professional');
+                } else {
+                    const updatedData = {
+                        startTime: startDateTime,
+                        endTime: endDateTime,
+                        service: editForm.service,
+                        customer: {
+                            name: editForm.name,
+                            email: editForm.email,
+                            phone: editForm.phone
+                        }
+                    };
+
+                    const response = await fetch('/api/appointments/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            eventId: editingAppt.id,
+                            calendarId: editingAppt.calendarId,
+                            updates: updatedData
+                        })
+                    });
+
+                    if (response.ok) {
+                        showMessage('success', 'Appointment updated');
+                    } else {
+                        const data = await response.json();
+                        throw new Error(data.error || 'Update failed');
+                    }
+                }
+            }
+            setEditingAppt(null);
+            fetchAppointments();
+        } catch (err) {
+            console.error('Update error:', err);
+            showMessage('error', err.message || 'Failed to update appointment');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const filteredAppointments = appointments.filter(appt => {
+        const matchesStylist = filterStylist === 'all' || appt.stylist === filterStylist;
+        const matchesSearch = !searchQuery ||
+            appt.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            appt.customer.email.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesStylist && matchesSearch;
+    });
+
+    const uniqueStylists = [...new Set(appointments.map(a => a.stylist))];
+
+    const formatDateTime = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleString('en-GB', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    const isToday = (dateString) => {
+        const date = new Date(dateString);
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
+    };
+
+    const isPast = (dateString) => {
+        return new Date(dateString) < new Date();
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <SectionConfig
+                sectionId="booking"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Booking"
+                defaultHeadingName="Book Your Visit"
+                description="Enable or disable the booking section and customize its heading."
+                theme={theme}
+            />
+            <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
+                <h2 className="text-xl md:text-2xl font-semibold text-gray-900">Appointments</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* View Toggle */}
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-all text-sm ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                            <List size={16} /> List
+                        </button>
+                        <button
+                            onClick={() => setViewMode('calendar')}
+                            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-all text-sm ${viewMode === 'calendar' ? 'bg-white text-primary shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                        >
+                            <Calendar size={16} /> Calendar
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="bg-[var(--primary)] text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-opacity-90"
+                        style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        <Plus size={18} /> New Appointment
+                    </button>
+
+                    <button
+                        onClick={fetchAppointments}
+                        className="flex items-center gap-2 px-3 py-2 bg-secondary text-stone-900 rounded-lg hover:bg-stone-200 transition-colors"
+                        disabled={loading}
+                    >
+                        {loading ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />} Refresh
+                    </button>
+                </div>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3 md:p-4 mb-4 md:mb-6 space-y-3 md:space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                    <div className="flex-1">
+                        <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Filter by Professional</label>
+                        <select
+                            value={filterStylist}
+                            onChange={(e) => setFilterStylist(e.target.value)}
+                            className="w-full px-3 md:px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none h-[42px]"
+                        >
+                            <option value="all">All Professionals</option>
+                            {uniqueStylists.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1 md:mb-2">Search Customer</label>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search by name or email..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-9 md:pl-10 pr-3 md:pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none h-[42px]"
+                            />
+                            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content View */}
+            {viewMode === 'list' ? (
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm text-gray-600">
+                            <thead className="bg-gray-50 text-gray-900 font-medium border-b border-gray-200">
+                                <tr>
+                                    <th className="px-6 py-3">Date & Time</th>
+                                    <th className="px-6 py-3">Customer</th>
+                                    <th className="px-6 py-3">Service</th>
+                                    <th className="px-6 py-3">Professional</th>
+                                    <th className="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {filteredAppointments.map(appt => (
+                                    <tr key={appt.id} className={`hover:bg-gray-50 transition-colors ${isPast(appt.startTime) ? 'opacity-60 bg-gray-50' : ''}`}>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-gray-900">{formatDateTime(appt.startTime)}</span>
+                                                {isToday(appt.startTime) && <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full w-fit mt-1">Today</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div>
+                                                <div className="font-medium text-gray-900">{appt.customer.name}</div>
+                                                <div className="text-xs text-gray-500">{appt.customer.email}</div>
+                                                <div className="text-xs text-gray-500">{appt.customer.phone}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary text-primary/90 font-medium text-xs">
+                                                <Scissors size={12} />
+                                                {appt.service}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium text-xs ${STYLIST_COLORS[appt.stylist] || STYLIST_COLORS['default']}`}>
+                                                <User size={12} />
+                                                {appt.stylist}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => setEditingAppt(appt)}
+                                                    className="p-1 text-gray-500 hover:text-primary hover:bg-secondary rounded transition-colors"
+                                                    title="Edit Appointment"
+                                                >
+                                                    <Edit size={16} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(appt)}
+                                                    className="p-1 text-gray-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                                                    title="Delete Appointment"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {loading && filteredAppointments.length === 0 && (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center">
+                                            <div className="flex flex-col items-center gap-3">
+                                                <Loader2 size={32} className="animate-spin text-primary/80" />
+                                                <p className="text-gray-500 font-medium">Loading appointments...</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                                {!loading && filteredAppointments.length === 0 && (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                                            No appointments found matching your filters.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <CalendarView
+                    appointments={filteredAppointments}
+                    onEditAppointment={setEditingAppt}
+                    onDeleteAppointment={handleDelete}
+                    stylists={stylists}
+                    openingHours={openingHours}
+                    onSlotClick={handleSlotClick}
+                    defaultMode={initialCalendarViewMode}
+                />
+            )}
+
+            {/* Add Appointment Modal */}
+            <AnimatePresence>
+                {isAddModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[var(--primary)] text-[#EAE0D5]">
+                                <h3 className="text-lg font-semibold">{isAddingNewClient ? 'Add New Client' : 'New Appointment'}</h3>
+                                <button onClick={() => { setIsAddModalOpen(false); setIsAddingNewClient(false); }}><X size={20} /></button>
+                            </div>
+                            {isAddingNewClient ? (
+                                <div className="p-6 space-y-4 overflow-y-auto">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                        <input
+                                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]"
+                                            value={newClientData.name || clientSearch}
+                                            onChange={e => setNewClientData({ ...newClientData, name: e.target.value })}
+                                            placeholder="Jane Doe"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                        <input
+                                            type="email"
+                                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]"
+                                            value={newClientData.email}
+                                            onChange={e => setNewClientData({ ...newClientData, email: e.target.value })}
+                                            placeholder="jane@example.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                        <input
+                                            type="tel"
+                                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]"
+                                            value={newClientData.phone}
+                                            onChange={e => setNewClientData({ ...newClientData, phone: e.target.value })}
+                                            placeholder="+1 234 567 8900"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={() => setIsAddingNewClient(false)} className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                                        <button onClick={handleQuickAddClient} style={{ backgroundColor: 'var(--primary)', color: 'white' }} className="flex-1 py-2 rounded-lg hover:opacity-90 font-medium">Save & Select</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleAddAppointment} className="flex-1 overflow-y-auto p-6 space-y-5">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Professional</label>
+                                            <select className="w-full p-2 border border-gray-300 rounded-lg" required value={newAppt.stylist} onChange={e => setNewAppt({ ...newAppt, stylist: e.target.value })}>
+                                                <option value="">-- Professional --</option>
+                                                {stylists?.map(s => <option key={s.id || s} value={s.stylist_name || s.name || s}>{s.stylist_name || s.name || s}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                                            <select className="w-full p-2 border border-gray-300 rounded-lg" required value={newAppt.service} onChange={e => setNewAppt({ ...newAppt, service: e.target.value })}>
+                                                <option value="">-- Service --</option>
+                                                {pricing?.map(p => (
+                                                    <option key={p.id} value={p.item_name}>
+                                                        {p.item_name} ({p.duration_minutes || 60}m) - {p.price}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Client</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Search client..."
+                                            value={clients?.find(c => c.id === newAppt.client_id)?.name || clientSearch}
+                                            onChange={(e) => {
+                                                setClientSearch(e.target.value);
+                                                if (newAppt.client_id) setNewAppt({ ...newAppt, client_id: '' }); // Clear selection on edit
+                                            }}
+                                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]"
+                                        />
+                                        {clientSearch && !newAppt.client_id && (
+                                            <div className="absolute z-10 w-full bg-white border border-gray-200 mt-1 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                {filteredClientsSearch && filteredClientsSearch.length > 0 && (
+                                                    filteredClientsSearch.map(c => (
+                                                        <div
+                                                            key={c.id}
+                                                            className="p-2 hover:bg-gray-50 cursor-pointer text-sm"
+                                                            onClick={() => {
+                                                                setNewAppt({ ...newAppt, client_id: c.id });
+                                                                setClientSearch('');
+                                                            }}
+                                                        >
+                                                            <div className="font-medium">{c.name}</div>
+                                                            <div className="text-xs text-gray-500">{c.email}</div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                                {(!filteredClientsSearch || filteredClientsSearch.length === 0) && (
+                                                    <div className="p-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setIsAddingNewClient(true);
+                                                            }}
+                                                            style={{ backgroundColor: 'var(--primary)', color: 'white' }}
+                                                            className="w-full text-sm px-4 py-3 rounded-lg hover:opacity-90 font-bold flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <Plus size={18} />
+                                                            <span>Create New Client "{clientSearch}"</span>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {newAppt.client_id && (
+                                            <button
+                                                type="button"
+                                                onClick={() => { setNewAppt({ ...newAppt, client_id: '' }); setClientSearch(''); }}
+                                                className="absolute right-2 top-8 text-gray-400 hover:text-gray-600"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-3 pt-2 border-t border-gray-100">
+                                        <label className="block text-sm font-bold text-gray-800">Date & Time</label>
+                                        <div className="space-y-4">
+
+                                            <AntdDatePicker
+                                                value={newAppt.date}
+                                                onChange={(date, dateString) => setNewAppt({ ...newAppt, date: dateString })}
+                                                className=""
+                                                disabledDate={(date) => {
+                                                    const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                                    const dayName = WEEK_DAYS[date.getDay()];
+                                                    const parsedHours = parseOpeningHours(openingHours);
+                                                    const slots = parsedHours[dayName];
+                                                    return !slots || !slots.some(s => s);
+                                                }}
+                                            />
+
+
+                                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Available Slots</label>
+                                            {isLoadingSlots ? (
+                                                <div className="flex items-center justify-center gap-2 text-sm text-gray-500 py-4">
+                                                    <Loader2 size={18} className="animate-spin" /> checking...
+                                                </div>
+                                            ) : isClosed ? (
+                                                <div className="col-span-full text-sm text-center text-red-600 py-4 font-medium bg-red-50 rounded-lg border border-red-200">
+                                                    Business is closed on this day
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                                    {timeSlots.length > 0 ? (
+                                                        timeSlots.map(t => (
+                                                            <button
+                                                                key={t}
+                                                                type="button"
+                                                                onClick={() => setNewAppt({ ...newAppt, time: t })}
+                                                                className={`px-1 py-2 text-sm rounded-md border transition-all shadow-sm ${newAppt.time === t
+                                                                    ? 'text-white border-[var(--primary)] font-bold shadow-md'
+                                                                    : 'bg-white text-gray-700 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]'
+                                                                    }`}
+                                                                style={{ backgroundColor: newAppt.time === t ? 'var(--primary)' : 'white' }}
+                                                            >
+                                                                {t}
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="col-span-full text-sm text-center text-gray-400 py-4 italic">
+                                                            {newAppt.date ? 'No slots available for this date' : 'Select a date to view slots'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {clients.find(c => c.id === newAppt.client_id)?.email && (
+                                            <div className="flex items-center gap-2 px-1 pt-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="send_email"
+                                                    checked={newAppt.send_email}
+                                                    onChange={(e) => setNewAppt({ ...newAppt, send_email: e.target.checked })}
+                                                    className="w-4 h-4 accent-[var(--primary)] border-gray-300 rounded cursor-pointer"
+                                                />
+                                                <label htmlFor="send_email" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                                                    Send confirmation email to client
+                                                </label>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={isSaving}
+                                        className="w-full py-3.5 bg-[var(--primary)] text-white rounded-lg mt-6 font-bold text-lg shadow-md hover:shadow-lg hover:bg-opacity-95 transition-all transform active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        style={{ backgroundColor: isSaving ? 'var(--primary-hover)' : 'var(--primary)' }}
+                                    >
+                                        {isSaving ? (
+                                            <>
+                                                <Loader2 size={20} className="animate-spin" />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            'Confirm Booking'
+                                        )}
+                                    </button>
+
+                                    {/* Existing Appointments for Selected Date */}
+                                    {newAppt.date && (() => {
+                                        const selectedDateAppointments = appointments.filter(appt => {
+                                            const apptDate = new Date(appt.startTime);
+                                            const selectedDate = new Date(newAppt.date);
+                                            return apptDate.toDateString() === selectedDate.toDateString();
+                                        }).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+                                        if (selectedDateAppointments.length === 0) return null;
+
+                                        return (
+                                            <div className="mt-6 border-t border-gray-200 pt-6">
+                                                <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                                    <Calendar size={16} />
+                                                    Appointments on {new Date(newAppt.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                </h4>
+                                                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                                            <tr>
+                                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Time</th>
+                                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Customer</th>
+                                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Service</th>
+                                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Professional</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {selectedDateAppointments.map(appt => {
+                                                                const startTime = new Date(appt.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                                                const endTime = new Date(appt.endTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                                                const colorClass = STYLIST_COLORS[appt.stylist] || STYLIST_COLORS['default'];
+
+                                                                return (
+                                                                    <tr key={appt.id} className="hover:bg-gray-50">
+                                                                        <td className="px-3 py-2 text-gray-900 font-medium whitespace-nowrap">
+                                                                            {startTime} - {endTime}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-gray-700">
+                                                                            {appt.customer.name}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-gray-700">
+                                                                            {appt.service}
+                                                                        </td>
+                                                                        <td className="px-3 py-2">
+                                                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${colorClass}`}>
+                                                                                {appt.stylist}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </form>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Appointment Modal */}
+            <AnimatePresence>
+                {editingAppt && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[var(--primary)] text-[#EAE0D5]">
+                                <h3 className="text-lg font-semibold">Edit Appointment</h3>
+                                <button onClick={() => setEditingAppt(null)}><X size={20} /></button>
+                            </div>
+                            <form onSubmit={handleUpdate} className="p-6 space-y-5 overflow-y-auto flex-1">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.name}
+                                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                                            className="w-full h-[45px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none text-base bg-white"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                        <input
+                                            type="email"
+                                            value={editForm.email}
+                                            onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                                            className="w-full h-[45px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none text-base bg-white"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                        <input
+                                            type="tel"
+                                            value={editForm.phone}
+                                            onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                                            className="w-full h-[45px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none text-base bg-white"
+                                        />
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Professional</label>
+                                        <select
+                                            value={editForm.stylist}
+                                            onChange={e => setEditForm({ ...editForm, stylist: e.target.value })}
+                                            className="w-full h-[45px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none text-base bg-white"
+                                            required
+                                        >
+                                            <option value="">-- Select Professional --</option>
+                                            {stylists?.map(s => (
+                                                <option key={s.id || s} value={s.stylist_name || s.name || s}>
+                                                    {s.stylist_name || s.name || s}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                                        <select
+                                            value={editForm.service}
+                                            onChange={e => setEditForm({ ...editForm, service: e.target.value })}
+                                            className="w-full h-[45px] px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] outline-none text-base bg-white"
+                                            required
+                                        >
+                                            {pricing?.map(p => (
+                                                <option key={p.id} value={p.item_name}>
+                                                    {p.item_name} ({p.duration_minutes || 60}m) - {p.price}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-gray-100">
+                                    <label className="block text-sm font-bold text-gray-800 mb-3">Appointment Date & Time</label>
+                                    <div className="space-y-4">
+                                        <AntdDatePicker
+                                            value={editForm.date}
+                                            onChange={(date, dateString) => setEditForm({ ...editForm, date: dateString, time: '' })}
+                                            className="w-full"
+                                            disabledDate={(date) => {
+                                                const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                                const dayName = WEEK_DAYS[date.getDay()];
+                                                const parsedHours = parseOpeningHours(openingHours);
+                                                const slots = parsedHours[dayName];
+                                                return !slots || !slots.some(s => s);
+                                            }}
+                                        />
+
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Available Slots</label>
+                                        {isLoadingSlots ? (
+                                            <div className="flex items-center justify-center gap-2 text-sm text-gray-500 py-4">
+                                                <Loader2 size={18} className="animate-spin" /> checking availability...
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-40 overflow-y-auto custom-scrollbar p-1">
+                                                {timeSlots.length > 0 ? (
+                                                    timeSlots.map(t => (
+                                                        <button
+                                                            key={t}
+                                                            type="button"
+                                                            onClick={() => setEditForm({ ...editForm, time: t })}
+                                                            className={`px-1 py-2 text-xs rounded-md border transition-all shadow-sm ${editForm.time === t
+                                                                ? 'text-white border-[var(--primary)] font-bold shadow-md'
+                                                                : 'bg-white text-gray-700 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]'
+                                                                }`}
+                                                            style={{ backgroundColor: editForm.time === t ? 'var(--primary)' : 'white' }}
+                                                        >
+                                                            {t}
+                                                        </button>
+                                                    ))
+                                                ) : (
+                                                    <div className="col-span-full text-sm text-center text-gray-400 py-4 italic">
+                                                        No slots available for this date
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-6 border-t border-gray-100">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingAppt(null)}
+                                        className="flex-1 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSaving || !editForm.time}
+                                        className="flex-1 py-3 bg-[var(--primary)] text-white rounded-lg hover:bg-opacity-90 font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                                        style={{ backgroundColor: "var(--primary)" }}
+                                    >
+                                        {isSaving ? (
+                                            <>
+                                                <Loader2 size={18} className="animate-spin" />
+                                                Saving...
+                                            </>
+                                        ) : 'Save Changes'}
+                                    </button>
+                                </div>
+
+                                <div className="pt-4 flex justify-center">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.preventDefault(); handleDelete(editingAppt); }}
+                                        className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1 transition-colors"
+                                    >
+                                        <Trash2 size={14} /> Delete Appointment
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+};
+
+
+
+const CalendarView = ({ appointments, onEditAppointment, onDeleteAppointment, stylists, openingHours, onSlotClick = () => { }, defaultMode = 'week' }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [calendarViewMode, setCalendarViewMode] = useState(defaultMode); // 'month', 'week', 'day'
+
+    const parsedOpeningHours = React.useMemo(() => parseOpeningHours(openingHours), [openingHours]);
+
+    const isDayOpen = (date) => {
+        if (!openingHours || openingHours === '') return true;
+        const dayName = WEEK_DAYS[date.getDay()];
+        const slots = parsedOpeningHours[dayName];
+        return slots ? slots.some(s => s) : true;
+    };
+
+    // Helper functions - defined first so getTimeSlots can use them
+    const getWeekDays = (date) => {
+        const day = date.getDay();
+        const diff = date.getDate() - day;
+        const sunday = new Date(date);
+        sunday.setDate(diff);
+
+        const week = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(sunday);
+            d.setDate(sunday.getDate() + i);
+            week.push(d);
+        }
+        return week;
+    };
+
+    const getDaysInMonth = (date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startingDayOfWeek = firstDay.getDay();
+
+        const days = [];
+        for (let i = 0; i < startingDayOfWeek; i++) {
+            days.push(null);
+        }
+        for (let day = 1; day <= daysInMonth; day++) {
+            days.push(new Date(year, month, day));
+        }
+        return days;
+    };
+
+    // Calculate time slots based on opening hours for the current view
+    const getTimeSlots = () => {
+        if (!openingHours || openingHours === '') {
+            // Default to 8 AM - 8 PM if no opening hours set
+            return Array.from({ length: 13 }, (_, i) => i + 8);
+        }
+
+        let minHour = 24;
+        let maxHour = 0;
+
+        // Determine which days to check based on view mode
+        let daysToCheck = [];
+        if (calendarViewMode === 'day') {
+            daysToCheck = [currentDate];
+        } else if (calendarViewMode === 'week') {
+            daysToCheck = getWeekDays(currentDate).filter(d => isDayOpen(d));
+        } else {
+            // For month view, check all days in the current month
+            const daysInMonth = getDaysInMonth(currentDate);
+            daysToCheck = daysInMonth.filter(d => d && isDayOpen(d));
+        }
+
+        // Find min and max hours across all relevant days
+        daysToCheck.forEach(date => {
+            if (!date) return;
+            const dayName = WEEK_DAYS[date.getDay()];
+            const slots = parsedOpeningHours[dayName];
+
+            if (slots && slots.some(s => s)) {
+                // Find first true slot (opening time)
+                const firstSlot = slots.findIndex(s => s);
+                if (firstSlot !== -1) {
+                    const hour = firstSlot + 8; // slots array starts at 8 AM
+                    minHour = Math.min(minHour, hour);
+                }
+
+                // Find last true slot (closing time)
+                const lastSlot = slots.length - 1 - [...slots].reverse().findIndex(s => s);
+                if (lastSlot !== -1) {
+                    const hour = lastSlot + 8 + 1; // +1 to include the closing hour
+                    maxHour = Math.max(maxHour, hour);
+                }
+            }
+        });
+
+        // If no valid hours found, use defaults
+        if (minHour === 24 || maxHour === 0) {
+            return Array.from({ length: 13 }, (_, i) => i + 8);
+        }
+
+        // Generate time slots array from min to max hour
+        const length = maxHour - minHour;
+        return Array.from({ length }, (_, i) => i + minHour);
+    };
+
+    const TIME_SLOTS = React.useMemo(() => getTimeSlots(), [openingHours, calendarViewMode, currentDate, parsedOpeningHours]);
+
+
+
+    const getAppointmentsForDay = (date) => {
+        if (!date) return [];
+        return appointments.filter(appt => {
+            const apptDate = new Date(appt.startTime);
+            return apptDate.toDateString() === date.toDateString();
+        }).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+    };
+
+    const getAppointmentsForTimeSlot = (date, hour) => {
+        const dayAppts = getAppointmentsForDay(date);
+        return dayAppts.filter(appt => {
+            const apptHour = new Date(appt.startTime).getHours();
+            return apptHour === hour;
+        });
+    };
+
+    const navigate = (direction) => {
+        const newDate = new Date(currentDate);
+        if (calendarViewMode === 'month') {
+            newDate.setMonth(newDate.getMonth() + direction);
+        } else if (calendarViewMode === 'week') {
+            newDate.setDate(newDate.getDate() + (direction * 7));
+        } else {
+            newDate.setDate(newDate.getDate() + direction);
+        }
+        setCurrentDate(newDate);
+    };
+
+    const goToToday = () => {
+        setCurrentDate(new Date());
+    };
+
+    const isToday = (date) => {
+        if (!date) return false;
+        const today = new Date();
+        return date.toDateString() === today.toDateString();
+    };
+
+    const formatDateHeader = () => {
+        if (calendarViewMode === 'month') {
+            return currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+        } else if (calendarViewMode === 'week') {
+            const week = getWeekDays(currentDate);
+            const start = week[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            const end = week[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            return `${start} - ${end}`;
+        } else {
+            return currentDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        }
+    };
+
+    const renderMonthView = () => {
+        const days = getDaysInMonth(currentDate);
+
+        return (
+            <div className="grid grid-cols-7 gap-1 md:gap-2">
+                {WEEK_DAYS.map(day => (
+                    <div key={day} className="text-center text-xs md:text-sm font-medium text-gray-600 py-1 md:py-2">
+                        <span className="hidden sm:inline">{day}</span>
+                        <span className="sm:hidden">{day.substring(0, 1)}</span>
+                    </div>
+                ))}
+
+                {days.map((date, index) => {
+                    const isDateOpen = date && isDayOpen(date);
+                    const dayAppointments = date ? getAppointmentsForDay(date) : [];
+                    const isTodayDate = isToday(date);
+
+                    return (
+                        <div
+                            key={index}
+                            className={`min-h-[80px] sm:min-h-[100px] md:min-h-[120px] border rounded-md md:rounded-lg p-1 md:p-2 ${!date
+                                ? 'bg-gray-50'
+                                : !isDateOpen
+                                    ? 'bg-gray-50 border-gray-100 opacity-60'
+                                    : isTodayDate
+                                        ? 'bg-amber-50 border-amber-300'
+                                        : 'bg-white border-gray-200'
+                                }`}
+                        >
+                            {date && (
+                                <>
+                                    <div className={`text-xs md:text-sm font-medium mb-1 md:mb-2 ${isTodayDate ? 'text-amber-900' : isDateOpen ? 'text-gray-700' : 'text-gray-400'
+                                        }`}>
+                                        {date.getDate()}
+                                    </div>
+                                    {isDateOpen && (
+                                        <div className="space-y-0.5 md:space-y-1">
+                                            {dayAppointments.slice(0, 3).map(appt => {
+                                                const time = new Date(appt.startTime).toLocaleTimeString('en-GB', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                });
+                                                const colorClass = STYLIST_COLORS[appt.stylist] || STYLIST_COLORS.default;
+
+                                                return (
+                                                    <div
+                                                        key={appt.id}
+                                                        className={`text-[10px] sm:text-xs p-1 sm:p-1.5 rounded border cursor-pointer hover:shadow-sm transition-shadow active:scale-95 ${colorClass}`}
+                                                        onClick={(e) => { e.stopPropagation(); onEditAppointment(appt); }}
+                                                        title={`${appt.customer.name} - ${appt.customer.service}`}
+                                                    >
+                                                        <div className="font-medium truncate">{time}</div>
+                                                        <div className="truncate hidden sm:block">{appt.customer.name}</div>
+                                                        <div className="truncate text-[9px] sm:text-xs opacity-75 hidden md:block">{appt.stylist}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {dayAppointments.length > 3 && (
+                                                <div className="text-[9px] sm:text-xs text-gray-500 text-center">
+                                                    +{dayAppointments.length - 3} more
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {!isDateOpen && date && (
+                                        <div className="flex items-center justify-center h-1/2">
+                                            <span className="text-[10px] text-gray-400 italic">Closed</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const renderWeekView = () => {
+        const week = getWeekDays(currentDate);
+        const filteredWeek = week.filter(d => isDayOpen(d));
+
+        if (filteredWeek.length === 0) {
+            return (
+                <div className="p-12 text-center bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-gray-500">We are closed on all days this week.</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="overflow-x-auto">
+                <div className="min-w-[600px]">
+                    {/* Header */}
+                    <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: `80px repeat(${filteredWeek.length}, minmax(0, 1fr))` }}>
+                        <div className="text-xs font-medium text-gray-600 p-2 text-center">Time</div>
+                        {filteredWeek.map((date, i) => {
+                            const isTodayDate = isToday(date);
+                            return (
+                                <div key={i} className={`text-center p-2 rounded-t-lg ${isTodayDate ? 'bg-amber-100' : 'bg-gray-50'
+                                    }`}>
+                                    <div className="text-xs font-medium text-gray-600">{WEEK_DAYS[date.getDay()]}</div>
+                                    <div className={`text-sm font-semibold ${isTodayDate ? 'text-amber-900' : 'text-gray-900'}`}>
+                                        {date.getDate()}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Time slots */}
+                    <div className="space-y-1">
+                        {TIME_SLOTS.map(hour => (
+                            <div key={hour} className="grid gap-1" style={{ gridTemplateColumns: `80px repeat(${filteredWeek.length}, minmax(0, 1fr))` }}>
+                                <div className="text-xs text-gray-600 p-2 font-medium flex items-center justify-center">
+                                    {hour}:00
+                                </div>
+                                {filteredWeek.map((date, i) => {
+                                    const slotAppts = getAppointmentsForTimeSlot(date, hour);
+                                    const isTodayDate = isToday(date);
+
+                                    return (
+                                        <div
+                                            key={i}
+                                            className={`min-h-[70px] border rounded p-1 cursor-pointer transition-colors hover:bg-secondary ${isTodayDate ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}
+                                            onClick={() => onSlotClick(date, hour)}
+                                        >
+                                            {slotAppts.map(appt => {
+                                                const colorClass = STYLIST_COLORS[appt.stylist] || STYLIST_COLORS.default;
+                                                const time = new Date(appt.startTime).toLocaleTimeString('en-GB', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                });
+
+                                                return (
+                                                    <div
+                                                        key={appt.id}
+                                                        className={`text-xs p-2 rounded border cursor-pointer hover:shadow-md transition-all mb-1 ${colorClass}`}
+                                                        onClick={(e) => { e.stopPropagation(); onEditAppointment(appt); }}
+                                                    >
+                                                        <div className="font-semibold">{time}</div>
+                                                        <div className="truncate font-medium">{appt.customer.name}</div>
+                                                        <div className="truncate text-xs opacity-75">{appt.customer.service}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDayView = () => {
+        if (!isDayOpen(currentDate)) {
+            return (
+                <div className="flex flex-col items-center justify-center p-12 bg-gray-50 rounded-lg border border-gray-200">
+                    <Clock size={48} className="text-gray-300 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900">Closed</h3>
+                    <p className="text-gray-500">We are not open on {currentDate.toLocaleDateString('en-GB', { weekday: 'long' })}.</p>
+                </div>
+            );
+        }
+
+        const isTodayDate = isToday(currentDate);
+
+        return (
+            <div className="w-full">
+                <div className={`text-center p-4 rounded-lg mb-4 ${isTodayDate ? 'bg-amber-100' : 'bg-gray-50'
+                    }`}>
+                    <div className="text-sm text-gray-600">{WEEK_DAYS[currentDate.getDay()]}</div>
+                    <div className={`text-2xl font-bold ${isTodayDate ? 'text-amber-900' : 'text-gray-900'}`}>
+                        {currentDate.getDate()}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                        {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    {TIME_SLOTS.map(hour => {
+                        const slotAppts = getAppointmentsForTimeSlot(currentDate, hour);
+
+                        return (
+                            <div key={hour} className="flex gap-3">
+                                <div className="w-20 text-sm text-gray-600 font-medium pt-2 text-right">
+                                    {hour}:00
+                                </div>
+                                <div
+                                    className={`flex-1 min-h-[70px] border rounded-lg p-3 cursor-pointer transition-colors hover:bg-secondary ${isTodayDate ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}
+                                    onClick={() => onSlotClick(currentDate, hour)}
+                                >
+                                    {slotAppts.map(appt => {
+                                        const colorClass = STYLIST_COLORS[appt.stylist] || STYLIST_COLORS.default;
+                                        const time = new Date(appt.startTime).toLocaleTimeString('en-GB', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        });
+
+                                        return (
+                                            <div
+                                                key={appt.id}
+                                                className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all mb-2 ${colorClass}`}
+                                                onClick={(e) => { e.stopPropagation(); onEditAppointment(appt); }}
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-semibold text-sm">{time}</span>
+                                                    <span className="text-xs px-2 py-1 rounded bg-white bg-opacity-50">
+                                                        {appt.stylist}
+                                                    </span>
+                                                </div>
+                                                <div className="font-medium">{appt.customer.name}</div>
+                                                <div className="text-sm opacity-75">{appt.customer.service}</div>
+                                                {appt.customer.phone && (
+                                                    <div className="text-xs mt-1 opacity-75">{appt.customer.phone}</div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 p-3 md:p-6">
+            {/* Calendar Header */}
+            <div className="flex flex-col gap-3 mb-4 md:mb-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-semibold text-gray-900">{formatDateHeader()}</h3>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={goToToday}
+                            className="px-3 py-2 text-xs md:text-sm text-primary hover:bg-secondary rounded-lg transition-all"
+                        >
+                            Today
+                        </button>
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                        >
+                            <ChevronLeft size={20} />
+                        </button>
+                        <button
+                            onClick={() => navigate(1)}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                        >
+                            <ChevronRight size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* View Mode Selector */}
+                <div className="flex bg-gray-100 rounded-lg p-1 w-full sm:w-auto">
+                    <button
+                        onClick={() => setCalendarViewMode('day')}
+                        className={`flex-1 sm:flex-none px-3 py-2 rounded-md transition-all text-xs md:text-sm ${calendarViewMode === 'day'
+                            ? 'bg-white text-primary shadow-sm font-medium'
+                            : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                    >
+                        Day
+                    </button>
+                    <button
+                        onClick={() => setCalendarViewMode('week')}
+                        className={`flex-1 sm:flex-none px-3 py-2 rounded-md transition-all text-xs md:text-sm ${calendarViewMode === 'week'
+                            ? 'bg-white text-primary shadow-sm font-medium'
+                            : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                    >
+                        Week
+                    </button>
+                    <button
+                        onClick={() => setCalendarViewMode('month')}
+                        className={`flex-1 sm:flex-none px-3 py-2 rounded-md transition-all text-xs md:text-sm ${calendarViewMode === 'month'
+                            ? 'bg-white text-primary shadow-sm font-medium'
+                            : 'text-gray-600 hover:text-gray-900'
+                            }`}
+                    >
+                        Month
+                    </button>
+                </div>
+            </div>
+
+            {/* Calendar Content */}
+            {calendarViewMode === 'month' && renderMonthView()}
+            {calendarViewMode === 'week' && renderWeekView()}
+            {calendarViewMode === 'day' && renderDayView()}
+
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-4 md:mt-6 pt-3 md:pt-4 border-t border-gray-200">
+                <span className="text-xs md:text-sm text-gray-600">Team:</span>
+                {stylists?.map(stylist => {
+                    const name = stylist.stylist_name || stylist.name || stylist;
+                    const colorClass = STYLIST_COLORS[name] || STYLIST_COLORS.default;
+                    return (
+                        <div key={name} className="flex items-center gap-1 md:gap-2">
+                            <div className={`w-3 h-3 md:w-4 md:h-4 rounded border ${colorClass}`}></div>
+                            <span className="text-xs md:text-sm text-gray-700">{name}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+const EditAppointmentModal = ({ appointment, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+        name: appointment.customer.name,
+        email: appointment.customer.email,
+        phone: appointment.customer.phone,
+        service: appointment.customer.service,
+        date: appointment.startTime.split('T')[0],
+        time: appointment.startTime.split('T')[1].substring(0, 5),
+    });
+
+    const handleSubmit = () => {
+        const startDateTime = new Date(`${formData.date}T${formData.time}:00`).toISOString();
+        const endDateTime = new Date(new Date(`${formData.date}T${formData.time}:00`).getTime() + 60 * 60 * 1000).toISOString();
+
+        onSave({
+            customer: {
+                name: formData.name,
+                email: formData.email,
+                phone: formData.phone
+            },
+            service: formData.service,
+            startTime: startDateTime,
+            endTime: endDateTime
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-semibold text-gray-900">Edit Appointment</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-all">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                        <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                        <input
+                            type="tel"
+                            value={formData.phone}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                        <input
+                            type="text"
+                            value={formData.service}
+                            onChange={(e) => setFormData({ ...formData, service: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                            <input
+                                type="date"
+                                value={formData.date}
+                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                            <input
+                                type="time"
+                                value={formData.time}
+                                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                    <button
+                        onClick={handleSubmit}
+                        className="flex-grow text-white py-2 rounded-lg transition-all"
+                        style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        Save Changes
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="px-6 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+
+const MessagesTab = ({ settings, setSettings, showMessage, refresh }) => {
+
+    const [template, setTemplate] = useState(settings.email_template || DEFAULT_EMAIL_TEMPLATE.trim());
+    const [subject, setSubject] = useState(settings.email_subject);
+    const [isSaving, setIsSaving] = useState(false);
+    const [showHtmlSource, setShowHtmlSource] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const contentEditableRef = React.useRef(null);
+
+    useEffect(() => {
+        if (settings.email_template) {
+            setTemplate(settings.email_template);
+        } else {
+            setTemplate(DEFAULT_EMAIL_TEMPLATE.trim());
+        }
+        if (settings.email_subject) {
+            setSubject(settings.email_subject);
+        }
+    }, [settings.email_template, settings.email_subject]);
+
+    // Update contentEditable when template changes (only if not currently editing in it to avoid cursor jumps,
+    // but here we rely on the toggle to switch modes so it's safer)
+    useEffect(() => {
+        if (contentEditableRef.current && !showHtmlSource) {
+            if (contentEditableRef.current.innerHTML !== template) {
+                contentEditableRef.current.innerHTML = template;
+            }
+        }
+    }, [template, showHtmlSource, showPreview]);
+
+
+    const handleSave = async () => {
+        // If in visual mode, get content from ref
+        let contentToSave = template;
+        if (!showHtmlSource && contentEditableRef.current) {
+            contentToSave = contentEditableRef.current.innerHTML;
+            setTemplate(contentToSave); // Sync state
+        }
+
+        setIsSaving(true);
+        try {
+            // Save template
+            const { error: templateError } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'email_template', value: contentToSave }, { onConflict: 'key' });
+            if (templateError) throw templateError;
+
+            // Save subject
+            const { error: subjectError } = await supabase
+                .from('site_settings')
+                .upsert({ key: 'email_subject', value: subject }, { onConflict: 'key' });
+            if (subjectError) throw subjectError;
+
+            showMessage('success', 'Email settings updated!');
+            refresh();
+        } catch (err) {
+            showMessage('error', err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleVisualBlur = () => {
+        if (contentEditableRef.current) {
+            setTemplate(contentEditableRef.current.innerHTML);
+        }
+    };
+
+    const resetToDefault = async () => {
+        if (window.confirm('Reset to default template? This will overwrite your current changes.')) {
+            const content = DEFAULT_EMAIL_TEMPLATE.trim();
+            const defaultSubject = 'Booking Confirmation';
+            setTemplate(content);
+            setSubject(defaultSubject);
+            if (contentEditableRef.current) {
+                contentEditableRef.current.innerHTML = content;
+            }
+
+            // We need to save both
+            setIsSaving(true);
+            try {
+                await supabase.from('site_settings').upsert({ key: 'email_template', value: content }, { onConflict: 'key' });
+                await supabase.from('site_settings').upsert({ key: 'email_subject', value: defaultSubject }, { onConflict: 'key' });
+                showMessage('success', 'Reset to defaults!');
+                refresh();
+            } catch (err) {
+                showMessage('error', err.message);
+            } finally {
+                setIsSaving(false);
+            }
+        }
+    };
+
+    const previewHtml = template
+        .replace(/{{name}}/g, 'Jane Doe')
+        .replace(/{{service}}/g, 'Full Balayage')
+        .replace(/{{professional}}/g, 'John Doe')
+        .replace(/{{date}}/g, 'Friday, 30 January 2026')
+        .replace(/{{time}}/g, '14:30')
+        .replace(/{{business_phone}}/g, settings.phone)
+        .replace(/{{business_address}}/g, settings.address)
+        .replace(/{{business_name}}/g, settings.business_name);
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h2 className="text-2xl font-semibold text-gray-900">Email Settings</h2>
+                    <p className="text-sm text-gray-500 mt-1">Customize the booking confirmation email sent to customers.</p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={resetToDefault}
+                        className="px-4 py-2 text-primary/80 hover:text-primary text-sm font-medium transition-colors"
+                    >
+                        Reset to Default
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover flex items-center gap-2 transition-all disabled:opacity-50"
+                        style={{ backgroundColor: "var(--primary)" }}
+                    >
+                        {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Editor Section */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Subject Line Input */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email Subject Line</label>
+                        <input
+                            type="text"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none"
+                            placeholder="e.g. Your Appointment at business name"
+                        />
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <Mail size={16} className="text-gray-500" />
+                                <span className="text-sm font-medium text-gray-700">
+                                    {showPreview ? 'Live Preview' : 'Email Content'}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setShowPreview(!showPreview)}
+                                    className={`text-xs font-semibold px-3 py-1 rounded-full transition-all flex items-center gap-1 ${showPreview ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                >
+                                    {showPreview ? <><Edit size={12} /> Exit Preview</> : <><Maximize2 size={12} /> Live Preview</>}
+                                </button>
+
+                                {!showPreview && (
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-primary/80 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={showHtmlSource}
+                                            onChange={(e) => setShowHtmlSource(e.target.checked)}
+                                            className="rounded border-gray-300 text-primary/80 focus:ring-stone-500"
+                                        />
+                                        Show HTML Source
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+
+                        {showPreview ? (
+                            <div className="h-[500px] overflow-y-auto p-8 bg-gray-50 flex items-start justify-center">
+                                <div
+                                    className="bg-white shadow-lg rounded-xl overflow-hidden w-full max-w-[600px] min-h-[400px] p-6 text-sm"
+                                    dangerouslySetInnerHTML={{ __html: previewHtml || '<p class="text-center text-gray-400 italic">No content to preview</p>' }}
+                                />
+                            </div>
+                        ) : showHtmlSource ? (
+                            <textarea
+                                value={template}
+                                onChange={(e) => setTemplate(e.target.value)}
+                                placeholder="Paste your HTML template here..."
+                                className="w-full h-[500px] p-4 font-mono text-sm focus:ring-0 border-none outline-none resize-none bg-slate-50 text-slate-700"
+                                spellCheck="false"
+                            />
+                        ) : (
+                            <div className="h-[500px] overflow-y-auto p-8 bg-gray-50">
+                                <div
+                                    ref={contentEditableRef}
+                                    contentEditable={true}
+                                    onBlur={handleVisualBlur}
+                                    className="bg-white shadow-lg rounded-xl w-full max-w-[600px] min-h-[400px] p-6 text-sm mx-auto outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-100"
+                                // Initial content is set via useEffect to avoid re-render loop on typing
+                                />
+                                <p className="text-center text-xs text-gray-400 mt-2">
+                                    Click inside the box to edit text directly.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Sidebar Section */}
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <Info size={16} className="text-primary" />
+                            Available Variables
+                        </h3>
+                        <p className="text-xs text-gray-500 mb-4">
+                            These variables will be replaced with actual details when sent.
+                        </p>
+                        <div className="space-y-3">
+                            {EMAIL_VARIABLES.map(v => (
+                                <div key={v.tag} className="flex flex-col gap-1">
+                                    <code className="text-[11px] bg-secondary text-primary px-2 py-1 rounded inline-block w-fit font-bold select-all">
+                                        {v.tag}
+                                    </code>
+                                    <span className="text-[10px] text-gray-500 ml-1">{v.desc}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-amber-50 rounded-xl border border-amber-200 p-6">
+                        <h3 className="text-sm font-bold text-amber-900 mb-2">Editing Tips</h3>
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                            You are editing the visual template.
+                            <br /><br />
+                            <strong>Caution:</strong> If you delete the style structure, the email might look different. Use "Show HTML Source" to restore or edit the layout code.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+
+
+// --- CLIENTS TAB COMPONENT ---
+const ClientsTab = ({ clients, setClients, showMessage, refreshClients }) => {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingClient, setEditingClient] = useState(null);
+    const [formData, setFormData] = useState({ name: '', email: '', phone: '', notes: '' });
+
+    const filteredClients = clients.filter(c =>
+        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.phone && c.phone.includes(searchTerm))
+    );
+
+    const handleOpenModal = (client = null) => {
+        if (client) {
+            setEditingClient(client);
+            setFormData({ name: client.name, email: client.email, phone: client.phone || '', notes: client.notes || '' });
+        } else {
+            setEditingClient(null);
+            setFormData({ name: '', email: '', phone: '', notes: '' });
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        try {
+            const { error } = await supabase
+                .from('clients')
+                .upsert({
+                    ...(editingClient && { id: editingClient.id }),
+                    ...formData
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            showMessage('success', editingClient ? 'Client updated' : 'Client created');
+            setIsModalOpen(false);
+            refreshClients();
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    const handleDelete = async (client) => {
+        if (window.confirm(`Are you sure you want to delete ${client.name}? This action cannot be undone.`)) {
+            try {
+                const { error } = await supabase
+                    .from('clients')
+                    .delete()
+                    .eq('id', client.id);
+
+                if (error) throw error;
+
+                showMessage('success', 'Client deleted successfully');
+                refreshClients();
+            } catch (err) {
+                showMessage('error', err.message);
+            }
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">Client Management</h2>
+                <button
+                    onClick={() => handleOpenModal()}
+                    className="text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90 transition-all font-medium"
+                    style={{ backgroundColor: "var(--primary)" }}
+                >
+                    <Plus size={18} /> Add Client
+                </button>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+                    <Search size={18} className="text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search clients..."
+                        className="bg-transparent border-none outline-none text-sm w-full"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-600">
+                        <thead className="bg-gray-50 text-gray-900 font-medium border-b border-gray-200">
+                            <tr>
+                                <th className="px-6 py-3">Name</th>
+                                <th className="px-6 py-3">Contact</th>
+                                <th className="px-6 py-3">Notes</th>
+                                <th className="px-6 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                            {filteredClients.map(client => (
+                                <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 font-medium text-gray-900">{client.name}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="flex items-center gap-1"><Mail size={12} /> {client.email}</span>
+                                            {client.phone && <span className="flex items-center gap-1"><Phone size={12} /> {client.phone}</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 truncate max-w-xs">{client.notes || '-'}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-3">
+                                            <button
+                                                onClick={() => handleOpenModal(client)}
+                                                className="text-[var(--primary)] hover:underline font-medium flex items-center gap-1"
+                                            >
+                                                <Edit size={14} /> Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(client)}
+                                                className="text-red-600 hover:text-red-800 hover:underline font-medium flex items-center gap-1"
+                                            >
+                                                <Trash2 size={14} /> Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredClients.length === 0 && (
+                                <tr>
+                                    <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                                        No clients found.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <AnimatePresence>
+                {isModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[var(--primary)] text-[#EAE0D5]">
+                                <h3 className="text-lg font-semibold">{editingClient ? 'Edit Client' : 'Add New Client'}</h3>
+                                <button onClick={() => setIsModalOpen(false)}><X size={20} /></button>
+                            </div>
+                            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                    <input className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input type="email" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                    <input type="tel" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                    <textarea className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[var(--primary)]" rows="3" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
+                                </div>
+                                <div className="flex gap-3 pt-4">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">Cancel</button>
+                                    <button type="submit" className="flex-1 py-2 text-white rounded-lg hover:opacity-90 font-medium transition-all" style={{ backgroundColor: "var(--primary)" }}>Save Client</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+};
+
+const TestimonialsTab = ({ testimonials, refresh, showMessage, settings, setSettings, theme }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingTestimonial, setEditingTestimonial] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [formData, setFormData] = useState({ name: '', description: '', image_url: '' });
+
+    const handleSaveSetting = async (key, value) => {
+        try {
+            const { error } = await supabase.from('site_settings').upsert({ key, value }, { onConflict: 'key' });
+            if (error) throw error;
+            setSettings(prev => ({ ...prev, [key]: value }));
+            showMessage('success', 'Setting updated!');
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    const handleOpenModal = (testimonial = null) => {
+        if (testimonial) {
+            setEditingTestimonial(testimonial);
+            setFormData({
+                name: testimonial.name || '',
+                description: testimonial.description || '',
+                image_url: testimonial.image_url || ''
+            });
+        } else {
+            setEditingTestimonial(null);
+            setFormData({ name: '', description: '', image_url: '' });
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleSaveTestimonial = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            if (editingTestimonial) {
+                const { error } = await supabase
+                    .from('testimonials')
+                    .update(formData)
+                    .eq('id', editingTestimonial.id);
+                if (error) throw error;
+                showMessage('success', 'Testimonial updated!');
+            } else {
+                const { error } = await supabase
+                    .from('testimonials')
+                    .insert([{ ...formData, sort_order: testimonials.length }]);
+                if (error) throw error;
+                showMessage('success', 'Testimonial added!');
+            }
+            setIsModalOpen(false);
+            refresh();
+        } catch (err) {
+            showMessage('error', err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this testimonial?')) return;
+        try {
+            const { error } = await supabase.from('testimonials').delete().eq('id', id);
+            if (error) throw error;
+            showMessage('success', 'Testimonial deleted!');
+            refresh();
+        } catch (err) {
+            showMessage('error', err.message);
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+            <SectionConfig
+                sectionId="testimonials"
+                settings={settings}
+                setSettings={setSettings}
+                showMessage={showMessage}
+                defaultMenuName="Testimonials"
+                defaultHeadingName="Client Testimonials"
+                description="Enable or disable the testimonials section and customize its heading."
+                theme={theme}
+            />
+
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold text-gray-900">Customer Testimonials</h2>
+                <button
+                    onClick={() => handleOpenModal()}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:shadow-md transition-all text-sm font-medium"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                >
+                    <Plus size={18} /> Add Testimonial
+                </button>
+            </div>
+
+            {/* Testimonials List */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {testimonials.map((t) => (
+                    <div key={t.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col">
+                        {t.image_url && (
+                            <div className="h-40 overflow-hidden relative group">
+                                <img src={t.image_url} alt={t.name} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            </div>
+                        )}
+                        <div className="p-5 flex-grow">
+                            <p className="text-gray-900 font-semibold mb-1">{t.name || 'Anonymous'}</p>
+                            <p className="text-gray-600 text-sm italic line-clamp-4">"{t.description}"</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+                            <button onClick={() => handleOpenModal(t)} className="p-2 text-primary/80 hover:bg-secondary rounded-lg transition-colors">
+                                <Edit size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <AnimatePresence>
+                {isModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[var(--primary)] text-[#EAE0D5]">
+                                <h3 className="text-lg font-semibold">{editingTestimonial ? 'Edit Testimonial' : 'Add Testimonial'}</h3>
+                                <button onClick={() => setIsModalOpen(false)} className="hover:rotate-90 transition-transform"><X size={20} /></button>
+                            </div>
+
+                            <form onSubmit={handleSaveTestimonial} className="p-6 space-y-5 overflow-y-auto">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Client Image (Optional)</label>
+                                    <div className="flex items-center gap-4">
+                                        {formData.image_url && (
+                                            <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                                                <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+                                        <div className="flex-grow">
+                                            <ImageUploader
+                                                folder="testimonials"
+                                                onUpload={(url) => setFormData({ ...formData, image_url: url })}
+                                                showMessage={showMessage}
+                                            />
+                                            {formData.image_url && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, image_url: '' })}
+                                                    className="mt-2 text-xs text-red-600 hover:underline"
+                                                >
+                                                    Remove Image
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Client Name (Optional)</label>
+                                    <input
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"
+                                        placeholder="e.g. Sarah J."
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-gray-500 uppercase">Review Description</label>
+                                    <textarea
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm min-h-[120px]"
+                                        placeholder="Enter the client's testimonial..."
+                                        required
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsModalOpen(false)}
+                                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:shadow-lg transition-all font-medium flex items-center justify-center gap-2"
+                                        style={{ backgroundColor: 'var(--primary)' }}
+                                    >
+                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                                        {editingTestimonial ? 'Update' : 'Save'} Testimonial
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+};
+
+// ============================================================
+// CUSTOM SECTIONS TAB - Dynamic Section Builder
+// ============================================================
+
+const CustomSectionsTab = ({ customSections = [], setCustomSections, siteSettings, refresh, showMessage }) => {
+    const [editingSection, setEditingSection] = useState(null);
+
+    const handleAddSection = async () => {
+        try {
+            const maxOrder = customSections.length > 0
+                ? Math.max(...customSections.map(s => s.sort_order))
+                : 0;
+
+            const { data, error } = await supabase
+                .from('custom_sections')
+                .insert([{
+                    title: 'New Section',
+                    menu_name: 'New Section',
+                    heading_name: 'New Section',
+                    enabled: true,
+                    sort_order: maxOrder + 1,
+                    element_limit: 10,
+                    background_color: siteSettings?.background_color || '#F5F1ED',
+                    text_color: siteSettings?.primary_brown || 'var(--primary)'
+                }])
+                .select('*, custom_section_elements(*)')
+                .single();
+
+            if (error) throw error;
+
+            // Immediately add to page flow table for visibility
+            await supabase.from('site_page_sections').upsert({
+                id: data.id,
+                label: data.title,
+                is_custom: true,
+                sort_order: (maxOrder + 1) * 10,
+                enabled: true
+            });
+
+            setCustomSections([...customSections, data]);
+            setEditingSection(data);
+            showMessage('success', 'Section created! Add elements to get started.');
+        } catch (err) {
+            console.error('Error creating section:', err);
+            showMessage('error', 'Error creating section');
+        }
+    };
+
+    const handleDeleteSection = async (sectionId) => {
+        if (!window.confirm('Are you sure you want to delete this section and all its elements?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('custom_sections')
+                .delete()
+                .eq('id', sectionId);
+
+            if (error) throw error;
+
+            // Also remove from page flow table
+            await supabase.from('site_page_sections').delete().eq('id', sectionId);
+
+            const updatedSections = customSections.filter(s => s.id !== sectionId);
+            setCustomSections(updatedSections);
+            if (editingSection?.id === sectionId) setEditingSection(null);
+            showMessage('success', 'Section deleted');
+        } catch (err) {
+            console.error('Error deleting section:', err);
+            showMessage('error', 'Error deleting section');
+        }
+    };
+
+    const handleReorderSections = async (newOrder) => {
+        try {
+            const updates = newOrder.map((section, index) => {
+                const { custom_section_elements, ...rest } = section;
+                return {
+                    ...rest,
+                    sort_order: index
+                };
+            });
+
+            const { error } = await supabase
+                .from('custom_sections')
+                .upsert(updates);
+
+            if (error) throw error;
+            setCustomSections(newOrder.map((s, idx) => ({ ...s, sort_order: idx })));
+            showMessage('success', 'Sections reordered');
+        } catch (err) {
+            console.error('Error reordering sections:', err);
+            showMessage('error', 'Error reordering sections');
+        }
+    };
+
+    if (editingSection) {
+        return (
+            <CustomSectionEditor
+                section={editingSection}
+                onClose={() => {
+                    setEditingSection(null);
+                    refresh();
+                }}
+                showMessage={showMessage}
+            />
+        );
+    }
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                    <List size={24} />
+                    Custom Sections
+                </h2>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleAddSection}
+                        className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        <Plus size={18} />
+                        Add New Section
+                    </button>
+                </div>
+            </div>
+
+            {customSections.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                    <List size={48} className="mx-auto mb-4 text-gray-400" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Custom Sections Yet</h3>
+                    <p className="text-gray-600 mb-6">
+                        Create your first custom section to add dynamic content to your website
+                    </p>
+                    <button
+                        onClick={handleAddSection}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        <Plus size={18} />
+                        Add New Section
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-4">
+                    {customSections.map((section) => (
+                        <div key={section.id} className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-grow">
+                                    <h3 className="text-lg font-semibold text-gray-900">{section.title}</h3>
+                                    <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                        <span>Menu: {section.menu_name}</span>
+                                        <span>•</span>
+                                        <span>Heading: {section.heading_name}</span>
+                                        <span>•</span>
+                                        <span>{section.custom_section_elements?.length || 0} / {section.element_limit} elements</span>
+                                        <span>•</span>
+                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${section.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                            {section.enabled ? 'Visible' : 'Hidden'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setEditingSection(section)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all"
+                                        style={{ backgroundColor: 'var(--primary)' }}
+                                    >
+                                        <Edit size={16} />
+                                        Edit
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteSection(section.id)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all"
+                                    >
+                                        <Trash2 size={16} />
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </motion.div>
+    );
+};
+
+// ============================================================
+// PAGE FLOW TAB - Global Page Order Management
+// ============================================================
+
+const PageFlowTab = ({ customSections, showMessage, refreshSiteData }) => {
+    const [pageSections, setPageSections] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchPageSections();
+    }, [customSections]);
+
+    const fetchPageSections = async () => {
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('site_page_sections')
+                .select('*')
+                .order('sort_order', { ascending: true });
+
+            if (error) throw error;
+
+            // Define default sections that SHOULD exist
+            const DEFAULT_PAGE_SECTIONS = [
+                { id: 'services', label: 'Services', sort_order: 10 },
+                { id: 'team', label: 'Our Team', sort_order: 20 },
+                { id: 'pricing', label: 'Pricing', sort_order: 30 },
+                { id: 'testimonials', label: 'Testimonials', sort_order: 40 },
+                { id: 'booking', label: 'Booking', sort_order: 50 },
+                { id: 'gallery', label: 'Gallery', sort_order: 60 },
+                { id: 'contact', label: 'Contact', sort_order: 70, is_separate_page: true }
+            ];
+
+            // Merge with current custom sections to ensure all are present
+            let merged = [...(data || [])];
+            let changed = false;
+
+            // 1. Ensure all default sections are present
+            DEFAULT_PAGE_SECTIONS.forEach(def => {
+                if (!merged.find(ps => ps.id === def.id)) {
+                    merged.push({
+                        ...def,
+                        is_custom: false,
+                        enabled: true
+                    });
+                    changed = true;
+                }
+            });
+
+            // 2. Ensure all custom sections are present
+            customSections.forEach(cs => {
+                if (!merged.find(ps => ps.id === cs.id)) {
+                    merged.push({
+                        id: cs.id,
+                        label: cs.title,
+                        is_custom: true,
+                        sort_order: merged.length > 0 ? Math.max(...merged.map(m => m.sort_order)) + 10 : 10,
+                        enabled: cs.enabled
+                    });
+                    changed = true;
+                }
+            });
+
+            // 3. Remove sections that no longer exist (custom sections only)
+            const activeIds = merged.filter(m =>
+                !m.is_custom || customSections.find(cs => cs.id === m.id)
+            );
+
+            if (activeIds.length !== merged.length) {
+                merged = activeIds;
+                changed = true;
+            }
+
+            if (changed) {
+                // Upsert back to keep it in sync
+                const { error: upsertError } = await supabase.from('site_page_sections').upsert(merged.map(m => ({
+                    id: m.id,
+                    label: m.label,
+                    is_custom: !!m.is_custom,
+                    sort_order: m.sort_order,
+                    enabled: m.enabled !== false,
+                    is_separate_page: !!m.is_separate_page
+                })));
+                if (upsertError) console.error('Error upserting sections:', upsertError);
+            }
+
+            setPageSections(merged.sort((a, b) => a.sort_order - b.sort_order));
+        } catch (err) {
+            console.error('Error fetching page sections:', err);
+            showMessage('error', 'Error loading page configuration');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleToggleSeparatePage = async (id, currentStatus) => {
+        try {
+            const newStatus = !currentStatus;
+            const { error } = await supabase
+                .from('site_page_sections')
+                .update({ is_separate_page: newStatus })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            // Also update custom_sections if this is a custom section to keep in sync
+            const section = pageSections.find(s => s.id === id);
+            if (section && section.is_custom) {
+                await supabase
+                    .from('custom_sections')
+                    .update({ is_separate_page: newStatus })
+                    .eq('id', id);
+            }
+
+            setPageSections(prev => prev.map(s => s.id === id ? { ...s, is_separate_page: newStatus } : s));
+            if (refreshSiteData) refreshSiteData();
+            showMessage('success', 'Page flow type updated');
+        } catch (err) {
+            console.error('Error updating page flow type:', err);
+            showMessage('error', 'Error updating page flow type');
+        }
+    };
+
+    const handleToggleEnabled = async (id, currentStatus) => {
+        try {
+            const newStatus = !currentStatus;
+
+            // 1. Update site_page_sections
+            const { error } = await supabase
+                .from('site_page_sections')
+                .update({ enabled: newStatus })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            // 2. Sync with site_settings
+            const showKey = `show_${id}_section`;
+            await supabase
+                .from('site_settings')
+                .upsert({ key: showKey, value: String(newStatus) }, { onConflict: 'key' });
+
+            // 3. Update custom_sections if applicable
+            const section = pageSections.find(s => s.id === id);
+            if (section && section.is_custom) {
+                await supabase
+                    .from('custom_sections')
+                    .update({ enabled: newStatus })
+                    .eq('id', id);
+            }
+
+            setPageSections(prev => prev.map(s => s.id === id ? { ...s, enabled: newStatus } : s));
+            if (refreshSiteData) refreshSiteData();
+            showMessage('success', 'Visibility updated');
+        } catch (err) {
+            showMessage('error', 'Error updating visibility');
+        }
+    };
+
+    const handleMove = async (index, direction) => {
+        const newSections = [...pageSections];
+        const newIndex = index + direction;
+
+        if (newIndex < 0 || newIndex >= newSections.length) return;
+
+        [newSections[index], newSections[newIndex]] = [newSections[newIndex], newSections[index]];
+
+        // Update sort_order for all to ensure uniqueness and clean sequencing
+        const updated = newSections.map((s, i) => ({
+            ...s,
+            sort_order: (i + 1) * 10
+        }));
+
+        setPageSections(updated);
+
+        try {
+            const { error } = await supabase.from('site_page_sections').upsert(updated.map(u => ({
+                id: u.id,
+                label: u.label,
+                is_custom: u.is_custom,
+                sort_order: u.sort_order,
+                enabled: u.enabled,
+                is_separate_page: u.is_separate_page || false
+            })));
+            if (error) throw error;
+            if (refreshSiteData) refreshSiteData();
+        } catch (err) {
+            showMessage('error', 'Error saving new order');
+            fetchPageSections(); // Revert on error
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center p-12">
+                <Loader2 size={40} className="animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                        <Database size={24} />
+                        Page Flow
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Control the global vertical order and visibility of all website sections.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-secondary border-b border-gray-100 p-4 grid grid-cols-12 text-xs font-bold uppercase tracking-wider text-gray-500">
+                    <div className="col-span-1 text-center">Order</div>
+                    <div className="col-span-5 pl-4">Section Name</div>
+                    <div className="col-span-2 text-center">Type</div>
+                    <div className="col-span-2 text-center">Flow Type</div>
+                    <div className="col-span-2 text-center">Visibility</div>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                    {pageSections.map((section, index) => (
+                        <div key={section.id} className="grid grid-cols-12 items-center p-4 hover:bg-secondary transition-colors group">
+                            <div className="col-span-1 flex flex-col items-center gap-1">
+                                <button
+                                    onClick={() => handleMove(index, -1)}
+                                    disabled={index === 0}
+                                    className="p-1 hover:bg-gray-200 rounded disabled:opacity-20 text-gray-400 hover:text-gray-600"
+                                >
+                                    <ChevronUp size={16} />
+                                </button>
+                                <button
+                                    onClick={() => handleMove(index, 1)}
+                                    disabled={index === pageSections.length - 1}
+                                    className="p-1 hover:bg-gray-200 rounded disabled:opacity-20 text-gray-400 hover:text-gray-600"
+                                >
+                                    <ChevronDown size={16} />
+                                </button>
+                            </div>
+
+                            <div className="col-span-5 flex items-center gap-3 pl-4">
+                                {section.is_custom ? <List size={16} className="text-stone-400" /> : <Layout size={16} className="text-blue-400" />}
+                                <span className={`font-medium ${section.enabled ? 'text-gray-900' : 'text-gray-400 line-through'}`}>
+                                    {section.label}
+                                </span>
+                            </div>
+
+                            <div className="col-span-2 flex justify-center">
+                                <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-widest ${section.is_custom ? 'bg-secondary text-primary/80' : 'bg-secondary text-primary'}`}>
+                                    {section.is_custom ? 'Custom' : 'System'}
+                                </span>
+                            </div>
+
+                            <div className="col-span-2 flex justify-center">
+                                <button
+                                    onClick={() => handleToggleSeparatePage(section.id, section.is_separate_page)}
+                                    className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${section.is_separate_page
+                                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                        : 'bg-secondary text-primary hover:bg-blue-200'
+                                        }`}
+                                >
+                                    {section.is_separate_page ? 'Separate Page' : 'Landing Flow'}
+                                </button>
+                            </div>
+
+                            <div className="col-span-2 flex justify-center">
+                                <button
+                                    onClick={() => handleToggleEnabled(section.id, section.enabled)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:ring-2 focus:ring-stone-500 focus:outline-none ${section.enabled ? 'bg-primary' : 'bg-gray-400'}`}
+                                    style={section.enabled ? { backgroundColor: 'var(--primary)' } : { backgroundColor: '#9ca3af' }}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${section.enabled ? 'translate-x-6' : 'translate-x-1'}`}
+                                    />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-xl flex gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-secondary rounded-full flex items-center justify-center text-blue-600">
+                    <Info size={20} />
+                </div>
+                <div>
+                    <h4 className="font-bold text-blue-900">About Page Flow</h4>
+                    <p className="text-sm text-blue-800/80 mt-1 leading-relaxed">
+                        This table directly controls the <code>site_page_sections</code> database table.
+                        Moving items here will immediately change their position on the live website.
+                        System sections (like Services or Team) can be hidden but cannot be deleted.
+                        Custom sections can be edited in the "Custom Sections" tab.
+                    </p>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
+
+// Custom Section Editor Component
+const CustomSectionEditor = ({ section, onClose, showMessage }) => {
+    const [localSection, setLocalSection] = useState(section);
+    const [elements, setElements] = useState(section.custom_section_elements || []);
+    const [editingElement, setEditingElement] = useState(null);
+    const [addingElementType, setAddingElementType] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    const elementTypes = [
+        { type: 'gallery', label: 'Gallery Grid', icon: <Image size={18} />, description: 'Multiple images in a grid' },
+        { type: 'image_carousel', label: 'Image Carousel', icon: <ChevronRight size={18} />, description: 'Sliding gallery of images' },
+        { type: 'text_box', label: 'Text Box', icon: <MessageCircle size={18} />, description: 'Rich text content' },
+        { type: 'card', label: 'Card', icon: <Tag size={18} />, description: 'Title, description, image & link' },
+        { type: 'image', label: 'Single Image', icon: <Image size={18} />, description: 'One image with caption' },
+        { type: 'video', label: 'Video', icon: <Image size={18} />, description: 'Embedded or uploaded video' },
+        { type: 'qr_code', label: 'QR Code', icon: <Maximize2 size={18} />, description: 'Scan to visit a link' },
+        { type: 'list', label: 'Standard List', icon: <List size={18} />, description: 'Bullet points or numbered items' },
+        { type: 'button', label: 'Button', icon: <Plus size={18} />, description: 'Call to action link' },
+        { type: 'table', label: 'Table', icon: <List size={18} />, description: 'Structured data grid' },
+    ];
+
+    const handleSaveSection = async () => {
+        try {
+            setSaving(true);
+            const { error } = await supabase
+                .from('custom_sections')
+                .update({
+                    title: localSection.title,
+                    menu_name: localSection.menu_name,
+                    heading_name: localSection.heading_name,
+                    enabled: localSection.enabled,
+                    element_limit: localSection.element_limit,
+                    background_color: localSection.background_color,
+                    text_color: localSection.text_color
+                })
+                .eq('id', localSection.id);
+
+            if (error) throw error;
+
+            // Update label and visibility in page flow table
+            await supabase.from('site_page_sections')
+                .update({
+                    label: localSection.title,
+                    enabled: localSection.enabled
+                })
+                .eq('id', localSection.id);
+
+            showMessage('success', 'Section settings saved');
+        } catch (err) {
+            console.error('Error saving section:', err);
+            showMessage('error', 'Error saving section');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleAddElement = async (elementType) => {
+        if (elements.length >= localSection.element_limit) {
+            showMessage('error', `Maximum ${localSection.element_limit} elements allowed`);
+            return;
+        }
+
+        try {
+            const maxOrder = elements.length > 0 ? Math.max(...elements.map(e => e.sort_order)) : -1;
+            const { data, error } = await supabase
+                .from('custom_section_elements')
+                .insert([{
+                    section_id: localSection.id,
+                    element_type: elementType,
+                    sort_order: maxOrder + 1,
+                    config: {}
+                }])
+                .select()
+                .single();
+
+            if (error) throw error;
+            setElements([...elements, data]);
+            setEditingElement(data);
+            setAddingElementType(null);
+            showMessage('success', 'Element added');
+        } catch (err) {
+            console.error('Error adding element:', err);
+            showMessage('error', 'Error adding element');
+        }
+    };
+
+    const handleDeleteElement = async (elementId) => {
+        if (!window.confirm('Delete this element?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('custom_section_elements')
+                .delete()
+                .eq('id', elementId);
+
+            if (error) throw error;
+            setElements(elements.filter(e => e.id !== elementId));
+            if (editingElement?.id === elementId) setEditingElement(null);
+            showMessage('success', 'Element deleted');
+        } catch (err) {
+            console.error('Error deleting element:', err);
+            showMessage('error', 'Error deleting element');
+        }
+    };
+
+    const handleReorderElements = async (newElements) => {
+        try {
+            const updates = newElements.map((element, index) => ({
+                ...element,
+                sort_order: index
+            }));
+
+            const { error } = await supabase
+                .from('custom_section_elements')
+                .upsert(updates);
+
+            if (error) throw error;
+            setElements(newElements.map((e, idx) => ({ ...e, sort_order: idx })));
+            showMessage('success', 'Elements reordered');
+        } catch (err) {
+            console.error('Error reordering elements:', err);
+            showMessage('error', 'Error reordering elements');
+        }
+    };
+
+    const handleSaveElement = async (elementId, newConfig) => {
+        try {
+            const { error } = await supabase
+                .from('custom_section_elements')
+                .update({ config: newConfig })
+                .eq('id', elementId);
+
+            if (error) throw error;
+            setElements(elements.map(e => e.id === elementId ? { ...e, config: newConfig } : e));
+            showMessage('success', 'Element updated');
+        } catch (err) {
+            console.error('Error updating element:', err);
+            showMessage('error', 'Error updating element');
+        }
+    };
+
+    const getElementIcon = (type) => {
+        const found = elementTypes.find(et => et.type === type);
+        return found ? found.icon : <Tag size={16} />;
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+                    <Edit size={24} />
+                    Edit Section: {localSection.title}
+                </h2>
+                <button
+                    onClick={onClose}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-all"
+                >
+                    <X size={18} />
+                    Close
+                </button>
+            </div>
+
+            {/* Section Settings */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Section Settings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Section Title</label>
+                        <input
+                            value={localSection.title}
+                            onChange={e => setLocalSection({ ...localSection, title: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Menu Name</label>
+                        <input
+                            value={localSection.menu_name}
+                            onChange={e => setLocalSection({ ...localSection, menu_name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Section Heading</label>
+                        <input
+                            value={localSection.heading_name}
+                            onChange={e => setLocalSection({ ...localSection, heading_name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Element Limit</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={localSection.element_limit}
+                            onChange={e => setLocalSection({ ...localSection, element_limit: parseInt(e.target.value) || 10 })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Background Color (optional)</label>
+                        <input
+                            type="color"
+                            value={localSection.background_color || '#ffffff'}
+                            onChange={e => setLocalSection({ ...localSection, background_color: e.target.value })}
+                            className="w-full h-10 border border-gray-300 rounded-lg cursor-pointer"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-700 mb-2 block">Text Color</label>
+                        <input
+                            type="color"
+                            value={localSection.text_color || '#3d2b1f'}
+                            onChange={e => setLocalSection({ ...localSection, text_color: e.target.value })}
+                            className="w-full h-10 border border-gray-300 rounded-lg cursor-pointer"
+                        />
+                    </div>
+                    <div className="flex items-center">
+                        <label className="text-sm font-medium text-gray-700 mr-4">Show Section</label>
+                        <button
+                            onClick={() => setLocalSection({ ...localSection, enabled: !localSection.enabled })}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${localSection.enabled ? 'bg-primary' : 'bg-gray-400'}`}
+                            style={localSection.enabled ? { backgroundColor: 'var(--primary)' } : { backgroundColor: '#9ca3af' }}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform ${localSection.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+                </div>
+                <div className="mt-6">
+                    <button
+                        onClick={handleSaveSection}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-6 py-3 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        {saving ? 'Saving...' : 'Save Settings'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Elements Management */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                        Elements ({elements.length} / {localSection.element_limit})
+                    </h3>
+                    <button
+                        onClick={() => setAddingElementType(true)}
+                        disabled={elements.length >= localSection.element_limit}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                        <Plus size={18} />
+                        Add Element
+                    </button>
+                </div>
+
+                {/* Element Type Selector */}
+                {addingElementType && (
+                    <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm font-medium text-blue-900 mb-3">Select Element Type:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                            {elementTypes.map(et => (
+                                <button
+                                    key={et.type}
+                                    onClick={() => handleAddElement(et.type)}
+                                    className="flex flex-col items-center gap-2 p-4 bg-white border border-gray-300 rounded-lg hover:border-primary hover:shadow-md transition-all"
+                                >
+                                    {et.icon}
+                                    <span className="font-medium text-sm">{et.label}</span>
+                                    <span className="text-xs text-gray-600 text-center">{et.description}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => setAddingElementType(false)}
+                            className="mt-3 text-sm text-gray-600 hover:text-gray-900"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
+
+                {/* Elements List */}
+                {elements.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                        <Image size={48} className="mx-auto mb-3 text-gray-400" />
+                        <p>No elements yet. Add your first element to get started!</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {elements.sort((a, b) => a.sort_order - b.sort_order).map((element) => (
+                            <div key={element.id} className="flex items-center gap-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                                <div className="flex-shrink-0">
+                                    {getElementIcon(element.element_type)}
+                                </div>
+                                <div className="flex-grow">
+                                    <p className="font-medium text-gray-900 capitalize">{element.element_type.replace('_', ' ')}</p>
+                                    <p className="text-xs text-gray-600">
+                                        {Object.keys(element.config || {}).length > 0 ? 'Configured' : 'Not configured'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex flex-col gap-1 mr-2">
+                                        <button
+                                            onClick={() => {
+                                                const sorted = [...elements].sort((a, b) => a.sort_order - b.sort_order);
+                                                const index = sorted.findIndex(e => e.id === element.id);
+                                                if (index > 0) {
+                                                    const newOrder = [...sorted];
+                                                    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                                                    handleReorderElements(newOrder);
+                                                }
+                                            }}
+                                            disabled={elements.sort((a, b) => a.sort_order - b.sort_order).findIndex(e => e.id === element.id) === 0}
+                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                                        >
+                                            <ChevronUp size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const sorted = [...elements].sort((a, b) => a.sort_order - b.sort_order);
+                                                const index = sorted.findIndex(e => e.id === element.id);
+                                                if (index < sorted.length - 1) {
+                                                    const newOrder = [...sorted];
+                                                    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                                                    handleReorderElements(newOrder);
+                                                }
+                                            }}
+                                            disabled={elements.sort((a, b) => a.sort_order - b.sort_order).findIndex(e => e.id === element.id) === elements.length - 1}
+                                            className="p-1 hover:bg-gray-200 rounded disabled:opacity-30"
+                                        >
+                                            <ChevronDown size={14} />
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() => setEditingElement(element)}
+                                        className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all text-sm"
+                                        style={{ backgroundColor: 'var(--primary)' }}
+                                    >
+                                        Configure
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteElement(element.id)}
+                                        className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all text-sm flex items-center justify-center"
+                                        title="Delete Element"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Element Configuration Modal */}
+            <AnimatePresence>
+                {editingElement && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                        onClick={() => setEditingElement(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-semibold text-gray-900 capitalize">
+                                        Configure {editingElement.element_type.replace('_', ' ')}
+                                    </h3>
+                                    <button
+                                        onClick={() => setEditingElement(null)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                    >
+                                        <X size={24} />
+                                    </button>
+                                </div>
+
+                                {editingElement.element_type === 'gallery' && (
+                                    <GalleryElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                )}
+                                {editingElement.element_type === 'text_box' && (
+                                    <TextBoxElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                    />
+                                )}
+                                {editingElement.element_type === 'card' && (
+                                    <CardElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                )}
+                                {editingElement.element_type === 'image' && (
+                                    <ImageElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                )}
+                                {editingElement.element_type === 'image_carousel' && (
+                                    <CarouselElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                )}
+                                {editingElement.element_type === 'qr_code' && (
+                                    <QRCodeElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                    />
+                                )}
+                                {editingElement.element_type === 'list' && (
+                                    <ListElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                    />
+                                )}
+                                {editingElement.element_type === 'button' && (
+                                    <ButtonElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                    />
+                                )}
+                                {editingElement.element_type === 'table' && (
+                                    <TableElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                    />
+                                )}
+                                {editingElement.element_type === 'video' && (
+                                    <VideoElementConfig
+                                        config={editingElement.config}
+                                        onSave={(config) => {
+                                            handleSaveElement(editingElement.id, config);
+                                            setEditingElement(null);
+                                        }}
+                                        showMessage={showMessage}
+                                    />
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </motion.div>
+    );
+};
+
+// Element Configuration Components
+const GalleryElementConfig = ({ config, onSave, showMessage }) => {
+    const [images, setImages] = useState(config.images || []);
+    const [columns, setColumns] = useState(config.columns || 3);
+
+    const handleAddImage = (url) => {
+        setImages([...images, { url, alt: '', caption: '' }]);
+    };
+
+    const handleRemoveImage = (index) => {
+        setImages(images.filter((_, i) => i !== index));
+    };
+
+    const handleUpdateImage = (index, field, value) => {
+        setImages(images.map((img, i) => i === index ? { ...img, [field]: value } : img));
+    };
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Grid Columns</label>
+                <select
+                    value={columns}
+                    onChange={e => setColumns(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                >
+                    <option value={2}>2 Columns</option>
+                    <option value={3}>3 Columns</option>
+                    <option value={4}>4 Columns</option>
+                </select>
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Images</label>
+                <ImageUploader folder="custom-sections" onUpload={handleAddImage} showMessage={showMessage} />
+            </div>
+
+            <div className="space-y-3 max-h-60 overflow-y-auto">
+                {images.map((img, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-start gap-3">
+                            <img src={img.url} alt="" className="w-16 h-16 object-cover rounded" />
+                            <div className="flex-grow space-y-2">
+                                <input
+                                    placeholder="Alt text"
+                                    value={img.alt}
+                                    onChange={e => handleUpdateImage(idx, 'alt', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                />
+                                <input
+                                    placeholder="Caption (optional)"
+                                    value={img.caption}
+                                    onChange={e => handleUpdateImage(idx, 'caption', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                />
+                            </div>
+                            <button
+                                onClick={() => handleRemoveImage(idx)}
+                                className="text-red-500 hover:text-red-700"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <button
+                onClick={() => onSave({ images, columns })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Gallery
+            </button>
+        </div>
+    );
+};
+
+const TextBoxElementConfig = ({ config, onSave }) => {
+    const [content, setContent] = useState(config.content || '');
+    const [alignment, setAlignment] = useState(config.alignment || 'left');
+    const [fontSize, setFontSize] = useState(config.fontSize || 'medium');
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Content</label>
+                <textarea
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Enter your text content here..."
+                    className="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Alignment</label>
+                    <select
+                        value={alignment}
+                        onChange={e => setAlignment(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    >
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Font Size</label>
+                    <select
+                        value={fontSize}
+                        onChange={e => setFontSize(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    >
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large">Large</option>
+                    </select>
+                </div>
+            </div>
+
+            <button
+                onClick={() => onSave({ content, alignment, fontSize })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Text Box
+            </button>
+        </div>
+    );
+};
+
+const CardElementConfig = ({ config, onSave, showMessage }) => {
+    const [title, setTitle] = useState(config.title || '');
+    const [description, setDescription] = useState(config.description || '');
+    const [imageUrl, setImageUrl] = useState(config.image_url || '');
+    const [linkUrl, setLinkUrl] = useState(config.link_url || '');
+    const [linkText, setLinkText] = useState(config.link_text || '');
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Title</label>
+                <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="Card title"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Description</label>
+                <textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Card description"
+                    className="w-full h-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none resize-none"
+                />
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Image</label>
+                <ImageUploader folder="custom-sections" onUpload={setImageUrl} showMessage={showMessage} />
+                {imageUrl && <img src={imageUrl} alt="Preview" className="mt-2 w-32 h-32 object-cover rounded" />}
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Link URL (optional)</label>
+                <input
+                    value={linkUrl}
+                    onChange={e => setLinkUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Link Text (optional)</label>
+                <input
+                    value={linkText}
+                    onChange={e => setLinkText(e.target.value)}
+                    placeholder="Learn More"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+
+            <button
+                onClick={() => onSave({ title, description, image_url: imageUrl, link_url: linkUrl, link_text: linkText })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Card
+            </button>
+        </div>
+    );
+};
+
+const ImageElementConfig = ({ config, onSave, showMessage }) => {
+    const [url, setUrl] = useState(config.url || '');
+    const [alt, setAlt] = useState(config.alt || '');
+    const [caption, setCaption] = useState(config.caption || '');
+    const [size, setSize] = useState(config.size || 'full');
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Image</label>
+                <ImageUploader folder="custom-sections" onUpload={setUrl} showMessage={showMessage} />
+                {url && <img src={url} alt="Preview" className="mt-2 w-full max-h-64 object-contain rounded" />}
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Alt Text</label>
+                <input
+                    value={alt}
+                    onChange={e => setAlt(e.target.value)}
+                    placeholder="Describe the image"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Caption (optional)</label>
+                <input
+                    value={caption}
+                    onChange={e => setCaption(e.target.value)}
+                    placeholder="Image caption"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Size</label>
+                <select
+                    value={size}
+                    onChange={e => setSize(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                >
+                    <option value="full">Full Width</option>
+                    <option value="large">Large</option>
+                    <option value="medium">Medium</option>
+                    <option value="small">Small</option>
+                </select>
+            </div>
+
+            <button
+                onClick={() => onSave({ url, alt, caption, size })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Image
+            </button>
+        </div>
+    );
+};
+
+const VideoElementConfig = ({ config, onSave, showMessage }) => {
+    const [url, setUrl] = useState(config.url || '');
+    const [type, setType] = useState(config.type || 'upload');
+    const [autoplay, setAutoplay] = useState(config.autoplay || false);
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Video Type</label>
+                <select
+                    value={type}
+                    onChange={e => setType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                >
+                    <option value="upload">Upload Video</option>
+                    <option value="embed">Embed URL</option>
+                </select>
+            </div>
+
+            {type === 'upload' ? (
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Upload Video</label>
+                    <VideoUploader folder="custom-sections" onUpload={setUrl} showMessage={showMessage} />
+                    {url && <video src={url} controls className="mt-2 w-full rounded" />}
+                </div>
+            ) : (
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Video URL</label>
+                    <input
+                        value={url}
+                        onChange={e => setUrl(e.target.value)}
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    />
+                </div>
+            )}
+
+            <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700">Autoplay</label>
+                <button
+                    onClick={() => setAutoplay(!autoplay)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full border-2 transition-colors ${autoplay ? 'border-[var(--primary)]' : 'border-gray-200'}`}
+                    style={{ backgroundColor: autoplay ? 'var(--primary)' : '#E5E7EB' }}
+                >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoplay ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+            </div>
+
+            <button
+                onClick={() => onSave({ url, type, autoplay })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Video
+            </button>
+        </div>
+    );
+};
+
+const CarouselElementConfig = ({ config, onSave, showMessage }) => {
+    const [images, setImages] = useState(config.images || []);
+
+    const handleAddImage = (url) => {
+        setImages([...images, { url, alt: '', caption: '' }]);
+    };
+
+    const handleUpdateImage = (index, field, value) => {
+        const newImages = [...images];
+        newImages[index][field] = value;
+        setImages(newImages);
+    };
+
+    const handleRemoveImage = (index) => {
+        setImages(images.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Add Image to Carousel</label>
+                <ImageUploader folder="custom-sections" onUpload={handleAddImage} showMessage={showMessage} />
+            </div>
+
+            <div className="space-y-3">
+                {images.map((img, idx) => (
+                    <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex gap-4">
+                        <img src={img.url} className="w-20 h-20 object-cover rounded shadow-sm" alt="Preview" />
+                        <div className="flex-grow space-y-2">
+                            <input
+                                value={img.caption}
+                                onChange={e => handleUpdateImage(idx, 'caption', e.target.value)}
+                                placeholder="Caption (optional)"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded outline-none"
+                            />
+                            <input
+                                value={img.alt}
+                                onChange={e => handleUpdateImage(idx, 'alt', e.target.value)}
+                                placeholder="Alt Text"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded outline-none"
+                            />
+                        </div>
+                        <button onClick={() => handleRemoveImage(idx)} className="text-red-500 hover:text-red-700">
+                            <Trash2 size={18} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+
+            <button
+                onClick={() => onSave({ images })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Carousel
+            </button>
+        </div>
+    );
+};
+
+const QRCodeElementConfig = ({ config, onSave }) => {
+    const [content, setContent] = useState(config.content || '');
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">QR Code Content (URL or Text)</label>
+                <input
+                    value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+            {content && (
+                <div className="flex flex-col items-center p-4 bg-gray-50 rounded-lg">
+                    <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(content)}`}
+                        alt="QR Preview"
+                        className="bg-white p-2 shadow-sm rounded border border-gray-200"
+                    />
+                    <p className="text-xs text-gray-500 mt-2">Preview of your QR code</p>
+                </div>
+            )}
+            <button
+                onClick={() => onSave({ content })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save QR Code
+            </button>
+        </div>
+    );
+};
+
+const ListElementConfig = ({ config, onSave }) => {
+    const [items, setItems] = useState(config.items || []);
+    const [type, setType] = useState(config.type || 'bullet'); // bullet, numbered
+
+    const handleAddItem = () => {
+        setItems([...items, 'New list item']);
+    };
+
+    const handleUpdateItem = (index, value) => {
+        const newItems = [...items];
+        newItems[index] = value;
+        setItems(newItems);
+    };
+
+    const handleRemoveItem = (index) => {
+        setItems(items.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">List Type</label>
+                <select
+                    value={type}
+                    onChange={e => setType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                >
+                    <option value="bullet">Bullet Points</option>
+                    <option value="numbered">Numbered List</option>
+                </select>
+            </div>
+
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 block">List Items</label>
+                {items.map((item, idx) => (
+                    <div key={idx} className="flex gap-2">
+                        <span className="mt-2 text-gray-400 font-mono text-sm">
+                            {type === 'numbered' ? `${idx + 1}.` : '•'}
+                        </span>
+                        <input
+                            value={item}
+                            onChange={e => handleUpdateItem(idx, e.target.value)}
+                            className="flex-grow px-3 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary outline-none"
+                        />
+                        <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700 px-1">
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                ))}
+                <button
+                    onClick={handleAddItem}
+                    className="mt-2 flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                    <Plus size={14} /> Add Item
+                </button>
+            </div>
+
+            <button
+                onClick={() => onSave({ items, type })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save List
+            </button>
+        </div>
+    );
+};
+
+const ButtonElementConfig = ({ config, onSave }) => {
+    const [label, setLabel] = useState(config.label || 'Click Here');
+    const [url, setUrl] = useState(config.url || '');
+    const [style, setStyle] = useState(config.style || 'solid'); // solid, outline
+    const [alignment, setAlignment] = useState(config.alignment || 'center'); // left, center, right
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Button Label</label>
+                <input
+                    value={label}
+                    onChange={e => setLabel(e.target.value)}
+                    placeholder="e.g. Book Appointment"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+            <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Link URL</label>
+                <input
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Style</label>
+                    <select
+                        value={style}
+                        onChange={e => setStyle(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    >
+                        <option value="solid">Solid</option>
+                        <option value="outline">Outline</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">Alignment</label>
+                    <select
+                        value={alignment}
+                        onChange={e => setAlignment(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    >
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                    </select>
+                </div>
+            </div>
+            <button
+                onClick={() => onSave({ label, url, style, alignment })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Button
+            </button>
+        </div>
+    );
+};
+
+const TableElementConfig = ({ config, onSave }) => {
+    const [rows, setRows] = useState(config.rows || [['Header 1', 'Header 2'], ['Row 1 Col 1', 'Row 1 Col 2']]);
+    const [hasHeader, setHasHeader] = useState(config.hasHeader !== false);
+
+    const handleUpdateCell = (rowIndex, colIndex, value) => {
+        const newRows = [...rows];
+        newRows[rowIndex][colIndex] = value;
+        setRows(newRows);
+    };
+
+    const handleAddRow = () => {
+        const newRow = new Array(rows[0]?.length || 2).fill('');
+        setRows([...rows, newRow]);
+    };
+
+    const handleAddColumn = () => {
+        setRows(rows.map(row => [...row, '']));
+    };
+
+    const handleRemoveRow = (rowIndex) => {
+        if (rows.length <= 1) return;
+        setRows(rows.filter((_, i) => i !== rowIndex));
+    };
+
+    const handleRemoveColumn = (colIndex) => {
+        if (rows[0].length <= 1) return;
+        setRows(rows.map(row => row.filter((_, i) => i !== colIndex)));
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input
+                        type="checkbox"
+                        checked={hasHeader}
+                        onChange={e => setHasHeader(e.target.checked)}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    First row as header
+                </label>
+            </div>
+
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full border-collapse">
+                    <tbody>
+                        {rows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className={rowIndex === 0 && hasHeader ? 'bg-gray-50' : ''}>
+                                {row.map((cell, colIndex) => (
+                                    <td key={colIndex} className="p-2 border border-gray-100 min-w-[120px]">
+                                        <div className="relative group">
+                                            <input
+                                                value={cell}
+                                                onChange={e => handleUpdateCell(rowIndex, colIndex, e.target.value)}
+                                                className={`w-full px-2 py-1 text-sm border border-transparent rounded focus:border-primary outline-none ${rowIndex === 0 && hasHeader ? 'font-bold' : ''}`}
+                                            />
+                                            {rowIndex === 0 && (
+                                                <button
+                                                    onClick={() => handleRemoveColumn(colIndex)}
+                                                    className="absolute -top-6 left-1/2 -translate-x-1/2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Remove Column"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                            {colIndex === 0 && (
+                                                <button
+                                                    onClick={() => handleRemoveRow(rowIndex)}
+                                                    className="absolute top-1/2 -left-6 -translate-y-1/2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Remove Row"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="flex gap-4">
+                <button
+                    onClick={handleAddRow}
+                    className="flex-1 flex items-center justify-center gap-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all text-sm font-medium"
+                >
+                    <Plus size={14} /> Add Row
+                </button>
+                <button
+                    onClick={handleAddColumn}
+                    className="flex-1 flex items-center justify-center gap-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all text-sm font-medium"
+                >
+                    <Plus size={14} /> Add Column
+                </button>
+            </div>
+
+            <button
+                onClick={() => onSave({ rows, hasHeader })}
+                className="w-full px-4 py-3 rounded-lg text-white font-medium transition-all"
+                style={{ backgroundColor: 'var(--primary)' }}
+            >
+                Save Table
+            </button>
+        </div>
+    );
+};
+
+export default AdminDashboard;
